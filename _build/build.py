@@ -2,7 +2,7 @@
 """Build whichfrost.com. Paths are always root-relative. CNAME is always written.
 
   python3 _build/build.py            # noindex on every page (SITE_INDEXABLE in config.py)
-  python3 _build/build.py --launch   # indexable, plus the Cloudflare beacon
+  python3 _build/build.py --launch   # indexable, Cloudflare beacon, GA4 after consent
 
 Then: python3 _build/check.py [--launch] && python3 _build/legal_gate.py check
 """
@@ -10,7 +10,7 @@ import json, os, sys, html, math, re, shutil
 from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (SITE_INDEXABLE, BRAND, DOMAIN, BASE_URL, PUBLISHED, PUBLISHED_H,
-                    INDEXNOW_KEY, CF_BEACON_TOKEN, CONTACT_EMAIL, US, ALIASES, NEIGHBORS, MONTHS)
+                    INDEXNOW_KEY, CF_BEACON_TOKEN, GA4_ID, CONTACT_EMAIL, US, ALIASES, NEIGHBORS, MONTHS)
 from planting import SOURCES, GA_SOURCE, GA_MONTHS, offset_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -183,7 +183,39 @@ def faq_ld(faqs):
     return {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
         {"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in faqs]}
 
+# Consent Mode v2 defaults stay denied. gtag.js is requested only from consent.js after Allow.
+GA4_SNIPPET = """<script id="ga4-loader">
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('consent', 'default', {
+  'ad_storage': 'denied',
+  'ad_user_data': 'denied',
+  'ad_personalization': 'denied',
+  'analytics_storage': 'denied',
+  'wait_for_update': 500
+});
+gtag('set', 'ads_data_redaction', true);
+gtag('set', 'url_passthrough', true);
+window.WF_GA4_ID = __GA4__;
+window.wfLoadGA4 = function () {
+  var id = window.WF_GA4_ID || '';
+  if (!/^G-[A-Z0-9]+$/.test(id)) return;
+  if (document.getElementById('ga4-gtag')) return;
+  var s = document.createElement('script');
+  s.id = 'ga4-gtag';
+  s.async = true;
+  s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(id);
+  document.head.appendChild(s);
+  gtag('js', new Date());
+  gtag('config', id);
+};
+</script>
+<script src="/assets/consent.js?v=1" defer></script>"""
+
 def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, legal=False, nav_current=None):
+    title = re.sub(r"\s+", " ", title).strip()
+    if len(title) >= 60:
+        raise SystemExit(f"title {len(title)} >= 60: {title}")
     desc = clip(desc)
     canon = url(path)
     robots = "noindex, follow" if (noindex or not INDEXABLE) else "index, follow, max-image-preview:large"
@@ -199,8 +231,10 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
     if INDEXABLE:
         beacon = ("<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' "
                   f"data-cf-beacon='{{\"token\": \"{CF_BEACON_TOKEN}\"}}'></script><!-- End Cloudflare Web Analytics -->")
+        ga4 = GA4_SNIPPET.replace("__GA4__", json.dumps(GA4_ID))
     else:
         beacon = "<!-- cf-beacon: added when SITE_INDEXABLE is true -->"
+        ga4 = ""
     nav = [("Home", "/"), ("States", "/states/"), ("Zones", "/zones/"), ("Sources", "/methodology/")]
     nav_html = "".join(
         f'<a href="{href}"' + (' aria-current="page"' if nav_current == href else "") + f">{label}</a>"
@@ -212,14 +246,14 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
 <title>{E(title)}</title><meta name="description" content="{E(desc)}"><link rel="canonical" href="{canon}">
 <meta name="robots" content="{robots}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="{BRAND}"><meta property="og:title" content="{E(title)}"><meta property="og:description" content="{E(desc)}"><meta property="og:url" content="{canon}"><meta property="og:image" content="{url("/og.png")}"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css?v=1">{scripts}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css?v=2">{scripts}
 </head><body><a class="skip" href="#main">Skip to content</a>
 <header class="site"><div class="wrap"><a class="brand" href="/">{LOGO}<span>{BRAND}</span></a><nav class="main" aria-label="Main">{nav_html}</nav></div></header>
 <main id="main" class="wrap">{crumb}{body}{legal_html}<!-- ad-slot: below-content (reserved; no ad code) --></main>
 <footer class="site"><div class="wrap"><p class="fbrand"><strong>{BRAND}</strong>: {E(FOOT)}</p>
-<p class="flinks"><a href="/about/">About</a> | <a href="/methodology/">Sources and methods</a> | <a href="/image-policy/">Image policy</a> | <a href="/terms/">Terms of use</a> | <a href="/privacy/">Privacy</a> | <a href="/disclaimer/">Disclaimer</a> | <a href="/ad-disclosure/">Advertising disclosure</a> | <a href="/copyright/">Copyright and DMCA</a> | <a href="/contact/">Contact</a></p>
+<p class="flinks"><a href="/about/">About</a> | <a href="/methodology/">Sources and methods</a> | <a href="/image-policy/">Image policy</a> | <a href="/terms/">Terms of use</a> | <a href="/privacy/">Privacy</a> | <a href="/disclaimer/">Disclaimer</a> | <a href="/ad-disclosure/">Advertising disclosure</a> | <a href="/copyright/">Copyright and DMCA</a> | <a href="/contact/">Contact</a> | <a href="/privacy/#cookies" id="cookie-settings">Cookie settings</a></p>
 </div></footer>
-<script src="/assets/site.js?v=1" defer></script>{beacon}
+<script src="/assets/site.js?v=1" defer></script>{ga4}{beacon}
 </body></html>'''
     if "—" in doc or "–" in doc:
         raise SystemExit("emdash in " + path)
@@ -364,7 +398,8 @@ def city_page(city, cities):
     zone = city.get("zone")
     zrange = city.get("zone_range") or ""
     dist = miles_text(city["miles"])
-    title = f"{name}, {state} frost dates and planting calendar"
+    h1 = f"{name}, {state} frost dates and planting calendar"
+    title = f"Which frost date for {name}, {state}"
     if sp and fa:
         desc = f"Median last 32°F freeze in {name}, {state}: {sp} in spring and {fa} in fall, from NOAA 1991 to 2020 normals."
         lead_frost = (f"The median last spring freeze at 32°F is {sp}. "
@@ -427,7 +462,6 @@ def city_page(city, cities):
     elif st in SOURCES:
         sources.append((SOURCES[st]["title"], SOURCES[st]["url"]))
     src_html = "".join(f'<li><a href="{href}" rel="nofollow noopener">{E(t)}</a></li>' for t, href in sources)
-    h1 = title
     body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <div class="answer"><p>{E(lead_frost)}{E(gsl_bit)}</p>
@@ -440,7 +474,7 @@ def city_page(city, cities):
 <p class="note">Not computed means the file stores -9999 with measurement flag Y (not enough values). Too rare to compute means -6666 (NOAA requires at least a 10 percent chance the temperature occurs). Year round risk means -4444.</p>
 {planting_block(city, cities)}
 <h2>More pages</h2>
-<p>Other {E(state)} cities: {sib_html}. Neighboring states: {oth_html}. This state: <a href="/states/{st.lower()}/">{E(state)}</a>.</p>
+<p>Other {E(state)} cities: {sib_html}. Neighboring states: {oth_html}. This state: <a href="/states/{st.lower()}/">{E(state)}</a>. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>
 {faq_html(faqs)}
 <section class="sources"><h2>Sources</h2><ul>{src_html}</ul>
 <p class="note">Normals retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive (v1.0.1, file dated 20230404). Zone ZIP tables retrieved the same day.</p></section>
@@ -463,18 +497,24 @@ def state_page(st, cities):
         rows.append("<tr><td><a href=\"/{}/{}/\">{}</a></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
             st.lower(), c["slug"], E(c["name"]), zlink, E(sp), E(fa), E(miles_text(c["miles"]))))
     neigh = ", ".join(f'<a href="/states/{n.lower()}/">{E(US[n])}</a>' for n in NEIGHBORS.get(st, []) if any(c["st"] == n for c in ALL))
-    faqs = [(
-        f"How were {state} cities chosen?",
-        f"Each city is an incorporated place with a 2024 Census population of at least 100,000, whose nearest NOAA normals station with a frost product is within 50 miles of the city center. {len(cities)} {state} places are on this site.")]
+    zs = sorted({c["zone"] for c in cities if c.get("zone")}, key=lambda z: (int(z[:-1]), z[-1]))
+    zhtml = ", ".join(f'<a href="/zones/{z}/">zone {E(z)}</a>' for z in zs)
+    zone_block = f'<h2>Zones in {E(state)}</h2><p>{zhtml}. <a href="/zones/">All zones</a>. <a href="/states/">All states</a>.</p>' if zhtml else '<p><a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>'
+    faqs = [
+        (f"Which frost date should I use in {state}?",
+         "The date columns are the NOAA 50 percent 32°F last spring freeze and first fall freeze at the nearest station. The 50 percent date is the median for 1991 to 2020. It is not a forecast for this year. Open a city for the 10 and 90 percent dates."),
+        (f"How were {state} cities chosen?",
+         f"Each city is an incorporated place with a 2024 Census population of at least 100,000, whose nearest NOAA normals station with a frost product is within 50 miles of the city center. {len(cities)} {state} places are on this site.")]
     body = f'''<article class="prose wide"><h1>{E(state)} frost dates</h1>
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p class="answer">{len(cities)} {E(state)} cities. The date columns are the NOAA 50 percent 32°F last spring freeze and first fall freeze at the nearest station. Open a city for the full table, the station, and the planting notes.</p>
 <div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Zone</th><th>Last 32°F</th><th>First 32°F</th><th>Station distance</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>
+{zone_block}
 <h2>Nearby states</h2><p>{neigh or "No neighboring state has a city page in this build."}</p>
 {faq_html(faqs)}
 <p class="note">Source: <a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI 1991 to 2020 climate normals</a>. <a href="/methodology/">How the station is chosen</a>.</p>
 </article>'''
-    page(path, f"{state} frost dates by city",
+    page(path, f"Which frost date should I use in {state}",
          f"Last and first 32°F frost dates for {len(cities)} {state} cities, from NOAA 1991 to 2020 normals at the nearest station.",
          body, [("/", "Home"), ("/states/", "States"), (path, state)],
          [article(f"{state} frost dates", path), faq_ld(faqs)], nav_current="/states/")
@@ -505,6 +545,15 @@ def zone_page(zone, cities):
     faqs = [(
         f"Does USDA zone {zone} tell me what to plant this week?",
         f"No. Zone {zone} is the 2023 USDA average annual extreme minimum temperature, {zrange}°F. Nurseries use it for which perennial plants can take a typical winter. Vegetable sowing dates on this site come from a state extension page counted against the city's NOAA frost date, when we have transcribed one.")]
+    ordered = sorted({c["zone"] for c in ALL if c.get("zone")}, key=lambda z: (int(z[:-1]), z[-1]))
+    here = ordered.index(zone)
+    near = []
+    if here > 0:
+        near.append(ordered[here - 1])
+    if here + 1 < len(ordered):
+        near.append(ordered[here + 1])
+    near_html = ", ".join(f'<a href="/zones/{z}/">zone {E(z)}</a>' for z in near) or "none"
+    state_links = ", ".join(f'<a href="/states/{st.lower()}/">{E(US[st])}</a>' for st in states)
     body = f'''<article class="prose wide"><h1>USDA zone {E(zone)}: what to plant now</h1>
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p class="answer">Zone {E(zone)} on the 2023 USDA Plant Hardiness Zone Map is an average annual extreme minimum of {E(zrange)}°F. It is not a frost date and not a sowing date.</p>
@@ -513,6 +562,9 @@ def zone_page(zone, cities):
 <p id="now-label">Planting notes below are grouped by state, because extension calendars are not the same across a zone. With JavaScript on, the current month is marked inside any month list.</p>
 <noscript><p>Find the current month inside any month list below.</p></noscript>
 {"".join(blocks)}
+<h2>Related</h2>
+<p>States with a city in this zone: {state_links}. <a href="/states/">All states</a>.</p>
+<p>Adjacent zone numbers on this site: {near_html}. <a href="/zones/">All zones</a>.</p>
 {faq_html(faqs)}
 <p class="note">Zone source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a>, ZIP tables from the <a href="{PRISM}" rel="nofollow noopener">PRISM Climate Group</a>. A city's zone is the ZIP code whose centroid is nearest the city center.</p>
 </article>'''
@@ -545,8 +597,8 @@ def home(cities):
     zones = sorted(set(c["zone"] for c in cities if c.get("zone")), key=lambda z: (int(z[:-1]), z[-1]))
     zlinks = " ".join(f'<a href="/zones/{z}/">{z}</a>' for z in zones)
     faqs = [
-        ("What does a frost date mean?",
-         "On this site the headline frost date is NOAA's 50 percent probability date at 32°F. For spring, that is the median date with a 50 percent chance the last freeze is still to come on or after it. For fall, it is the median date with a 50 percent chance the first freeze is on or before it. It describes 1991 to 2020, not the coming week."),
+        ("Which frost date should I use?",
+         "On this site the headline frost date is NOAA's 50 percent probability date at 32°F. For spring, that is the median date with a 50 percent chance the last freeze is still to come on or after it. For fall, it is the median date with a 50 percent chance the first freeze is on or before it. It describes 1991 to 2020, not the coming week. The 10 percent spring date is later, and it is the more cautious planting marker."),
         ("Where do the dates come from?",
          "NOAA National Centers for Environmental Information, U.S. Climate Normals for 1991 to 2020, at the nearest station that publishes a frost product, within 50 miles of the city center. Hardiness zones are the 2023 USDA map, via the PRISM ZIP code tables. Planting dates are transcribed only from the state extension page named on the city."),
         ("Why is a city missing?",
@@ -568,9 +620,9 @@ def home(cities):
 <h2>Hardiness zones</h2><p>What to plant now, by USDA zone: {zlinks}.</p>
 {faq_html(faqs)}
 </article>'''
-    page("/", f"{BRAND}: Frost Dates and Planting Calendars by City",
+    page("/", "Which frost date should I use? | Which Frost",
          f"Median last and first 32°F frost dates for {len(cities)} U.S. cities, from NOAA 1991 to 2020 normals, plus USDA zones.",
-         body, None, [faq_ld(faqs)], nav_current="/")
+         body, None, [article("Frost dates and a planting calendar for U.S. cities", "/"), faq_ld(faqs)], nav_current="/")
 
 def states_index(cities):
     by_state = {}
@@ -582,13 +634,18 @@ def states_index(cities):
             items.append(f'<li><a href="/states/{st.lower()}/">{E(US[st])}</a> ({len(by_state[st])} cities)</li>')
         else:
             items.append(f"<li>{E(US[st])}: no city in this build</li>")
+    faqs = [(
+        "Which states have a frost date page?",
+        "Delaware, Hawaii, Maine, Vermont, West Virginia, and Wyoming have no city page in this build. Every other state, and the District of Columbia, has one. A city is listed when it is an incorporated place of at least 100,000 people and a NOAA frost station is within 50 miles.")]
     body = f'''<article class="prose"><h1>Frost dates by state</h1>
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
-<p>Pick a state to see every city page, the median 32°F dates, and the zone.</p>
-<ul class="cols">{"".join(items)}</ul></article>'''
-    page("/states/", "Frost dates by state",
+<p>Pick a state to see every city page, the median 32°F dates, and the zone. Each state page links back to its cities.</p>
+<ul class="cols">{"".join(items)}</ul>
+{faq_html(faqs)}</article>'''
+    page("/states/", "Which frost date should I use by state",
          "State by state frost dates for the largest U.S. cities, from NOAA 1991 to 2020 climate normals.",
-         body, [("/", "Home"), ("/states/", "States")], [article("Frost dates by state", "/states/")], nav_current="/states/")
+         body, [("/", "Home"), ("/states/", "States")],
+         [article("Frost dates by state", "/states/"), faq_ld(faqs)], nav_current="/states/")
 
 def zones_index(cities):
     zones = {}
@@ -599,20 +656,29 @@ def zones_index(cities):
     for z in sorted(zones, key=lambda z: (int(z[:-1]), z[-1])):
         rng = zones[z][0].get("zone_range") or ""
         items.append(f'<li><a href="/zones/{z}/">Zone {z}</a> ({E(rng)}°F, {len(zones[z])} cities)</li>')
+    faqs = [(
+        "Which USDA zone should I use for a frost date?",
+        "A USDA zone is the average coldest winter temperature, in 5°F steps on the 2023 map. It is not a vegetable sowing date and not a frost date. Open a zone for the cities in it, then open a city for the NOAA 50 percent frost date.")]
     body = f'''<article class="prose"><h1>USDA zones and what to plant now</h1>
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
-<p>A USDA zone is the average coldest winter temperature, in 5°F steps on the 2023 map. It is not a vegetable sowing date. Open a zone for the cities in it and any state extension timing we transcribed.</p>
+<p>A USDA zone is the average coldest winter temperature, in 5°F steps on the 2023 map. It is not a vegetable sowing date. Open a zone for the cities in it and any state extension timing we transcribed. City pages link back here.</p>
 <ul class="cols">{"".join(items)}</ul>
+{faq_html(faqs)}
 <p class="note">Source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a> and <a href="{PRISM}" rel="nofollow noopener">PRISM ZIP tables</a>.</p>
 </article>'''
     page("/zones/", "USDA zones: what to plant now",
          "USDA hardiness zones for cities on Which Frost, and what to plant now where a state extension calendar was transcribed.",
-         body, [("/", "Home"), ("/zones/", "Zones")], [article("USDA zones", "/zones/")], nav_current="/zones/")
+         body, [("/", "Home"), ("/zones/", "Zones")],
+         [article("USDA zones", "/zones/"), faq_ld(faqs)], nav_current="/zones/")
 
-def simple(path, title, desc, h1, inner, crumb, legal=False, noindex=False):
+def simple(path, title, desc, h1, inner, crumb, legal=False, noindex=False, faqs=None):
+    if faqs:
+        inner += faq_html(faqs)
     body = f'<article class="prose"><h1>{E(h1)}</h1>{inner}</article>'
     crumbs = [("/", "Home"), (path, crumb)]
     schemas = [] if noindex else [article(h1, path)]
+    if faqs and not noindex:
+        schemas.append(faq_ld(faqs))
     page(path, title, desc, body, crumbs, schemas, noindex=noindex, legal=legal)
 
 def legal_pages():
@@ -622,7 +688,7 @@ def legal_pages():
 <h2>What we publish</h2><p>Every city page names one NOAA station, the 1991 to 2020 normals, and the distance from the city center. If NOAA did not compute a date, the page says so. We do not fill a gap with a guess.</p>
 <h2>What we leave out</h2><p>We do not publish a vegetable date unless it comes from that state's cooperative extension. Many states are still open. See <a href="/methodology/">sources and methods</a>.</p>
 <p>Something look wrong? <a href="/contact/">Tell us</a> and we will re check the station file.</p>''', "About")
-    simple("/methodology/", f"Sources and methods | {BRAND}",
+    simple("/methodology/", "Which frost date: sources and methods",
            "How Which Frost picks a NOAA station, reads frost probability dates, assigns a USDA zone, and copies extension planting dates.",
            "Sources and methods", f'''<p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <h2>Frost dates</h2>
@@ -640,10 +706,17 @@ def legal_pages():
 <p>Georgia uses University of Georgia Extension Circular 943 (full review 10 March 2026), as the middle Georgia calendar. The north and south adjustments in that circular are quoted. They are not applied as a new set of dates.</p>
 <p>New Hampshire uses the UNH Extension fact sheet "Growing Vegetables: When to Plant Your Vegetable Garden," retrieved {PUBLISHED_H}. Offsets are counted from the NOAA date, not from the Memorial Day example in that fact sheet.</p>
 <p>Every other state has no transcribed calendar in this build. The city page says so.</p>
-<h2>Checked</h2><p>Station files and the city match were retrieved {PUBLISHED_H}. Rebuild from the cache in <code>_build/cache</code> without downloading again. Re check when NCEI publishes a new normals period.</p>''', "Sources and methods")
+<h2>Checked</h2><p>Station files and the city match were retrieved {PUBLISHED_H}. Rebuild from the cache in <code>_build/cache</code> without downloading again. Re check when NCEI publishes a new normals period.</p>
+<p>City pages are listed by <a href="/states/">state</a> and by <a href="/zones/">USDA zone</a>.</p>''', "Sources and methods",
+           faqs=[
+               ("How does Which Frost pick a station?",
+                "A city is matched to the nearest NOAA station that has a frost product, using the Census Bureau 2024 Gazetteer city point. The cap is 50 miles. Farther than that, the city is skipped. Which Frost does not blend two stations."),
+               ("Which planting calendars are transcribed?",
+                "Colorado uses CSU Extension GardenNotes #720. Georgia uses University of Georgia Extension Circular 943. New Hampshire uses the UNH Extension fact sheet on when to plant a vegetable garden. Every other state has no transcribed calendar in this build."),
+           ])
     simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost uses an original mark and no photographs of places or people.",
            "Image policy", '''<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
-<p>City pages do not use photos. If a later page adds an image, it will be original or clearly licensed, and this page will name it.</p>''', "Image policy")
+<p>City pages do not use photos. There is no photograph on this site. If a later page adds an image, it will be original or clearly licensed, this page will name it, and the image will link here.</p>''', "Image policy")
     simple("/disclaimer/", f"Disclaimer | {BRAND}", "Which Frost publishes climate averages, not a forecast and not agricultural, legal, or insurance advice.",
            "Disclaimer", f'''<p>Last updated {PUBLISHED_H}.</p>
 <h2>Averages, not a forecast</h2><p>Frost dates are 30 year climate normals. A given year can freeze earlier or later than the median. Nothing on this site is a weather forecast. Check a forecast if you need the next few nights.</p>
@@ -656,17 +729,20 @@ def legal_pages():
 <h2>Accuracy</h2><p>We cite the station and the publication. We make no warranty that a page is complete or free of error. Report a mistake on the <a href="/contact/">contact page</a>.</p>
 <h2>Acceptable use</h2><p>You may read the site and share links. You may not scrape it in bulk, republish the original text or the compiled city tables without permission, misuse the contact form, or try to disrupt the site.</p>
 <h2>Intellectual property</h2><p>Original text, the compiled tables, and the site design belong to Joshua Israel Ventures LLC. NOAA, Census, USDA, and extension names belong to their publishers and are used to identify sources.</p>
-<h2>Third party services</h2><p>The site is hosted on GitHub Pages and links to NOAA, Census, USDA, PRISM, and extension sites. The contact form can send mail through FormSubmit. We are not responsible for those services.</p>
+<h2>Third party services</h2><p>The site is hosted on GitHub Pages and links to NOAA, Census, USDA, PRISM, and extension sites. The contact form can send mail through FormSubmit. The public site loads Cloudflare Web Analytics, and it loads Google Analytics 4 only if you allow it. See the <a href="/privacy/">privacy policy</a>. We are not responsible for those services.</p>
 <h2>Disclaimer of warranties and limitation of liability</h2><p>The site is provided "as is" and "as available". To the fullest extent permitted by law, Joshua Israel Ventures LLC disclaims all warranties, express or implied, and is not liable for indirect, incidental, special, consequential, or punitive damages, or any loss from use of the site. Our total liability for any claim relating to the site is limited to 100 U.S. dollars.</p>
 <h2>Indemnity</h2><p>You agree to indemnify Joshua Israel Ventures LLC against claims arising from your misuse of the site or your breach of these terms.</p>
 <h2>Governing law</h2><p>These terms are governed by the laws of the State of Florida, without regard to conflict of law rules. Disputes will be heard in the state or federal courts in Florida, and you consent to that jurisdiction.</p>
 <h2>Changes</h2><p>We may update these terms. The date above is the latest version.</p>''', "Terms of use", legal=True)
     simple("/privacy/", f"Privacy Policy | {BRAND}", "Privacy policy for Which Frost (whichfrost.com).",
            "Privacy policy", f'''<p>Last updated {PUBLISHED_H}. This policy explains how Which Frost (whichfrost.com), a trade name of Joshua Israel Ventures LLC, a Florida limited liability company, handles information.</p>
-<h2>Analytics</h2><p>When the public domain is live, pages can load Cloudflare Web Analytics. That service does not use cookies and does not track you across sites. It records basic, aggregated information such as the page, the referrer, the browser, and the country. The preview build does not load it.</p>
+<h2>Analytics</h2><p>Which Frost names the two analytics tools the public site uses.</p>
+<p>Cloudflare Web Analytics loads on every public page. It does not use cookies and does not track you across sites. It records basic, aggregated information such as the page, the referrer, the browser, and the country. The preview build does not load it.</p>
+<p>Google Analytics 4 loads on a public page only after you choose Allow analytics on the consent banner. The preview build does not load it. The Google tag is not requested until that choice. Until then, Consent Mode v2 defaults keep ad storage, ad user data, ad personalization, and analytics storage denied.</p>
 <h2>Contact</h2><p>If you email us or use the contact form, your name, email address, and message are used to reply. The form is delivered by FormSubmit (formsubmit.co). We keep messages only as long as needed to respond.</p>
 <h2>Advertising</h2><p>The site shows no ads today. If we add ads later, for example through Google AdSense, this policy will be updated first. You would be able to opt out of personalized advertising at <a href="https://www.google.com/settings/ads" rel="nofollow noopener">Google Ads Settings</a> and <a href="https://www.aboutads.info/choices/" rel="nofollow noopener">aboutads.info/choices</a>.</p>
-<h2>Cookies</h2><p>Which Frost itself sets no cookies. The site works if your browser blocks them.</p>
+<h2 id="cookies">Cookies</h2><p>Which Frost does not set its own cookie. The allow or refuse choice is stored in this browser's local storage as wf-ga4-consent, with the value granted or denied, so the banner can stay dismissed. If you allow analytics, Google Analytics 4 may set its own cookies and receive the page address. Ad storage stays denied, because the site shows no ads.</p>
+<p>Choose Cookie settings in the footer to change your choice. Blocking cookies and local storage does not block the frost dates. See the <a href="/ad-disclosure/">advertising disclosure</a>.</p>
 <h2>Hosting</h2><p>The site is hosted on GitHub Pages, which may log IP addresses for security and operations.</p>
 <h2>Your rights</h2><p>You can ask us to access, correct, or delete personal information we hold. Use the <a href="/contact/">contact page</a>. Residents of some states and countries may have additional rights, which we will honor.</p>
 <h2>Children</h2><p>The site is a general audience reference and is not directed at children under 13. We do not knowingly collect personal information from children.</p>
@@ -695,7 +771,7 @@ def legal_pages():
 <p class="note">The form is delivered by FormSubmit (formsubmit.co) to the same address. You can also use the email link above. See the <a href="/privacy/">privacy policy</a>.</p>''', "Contact")
     simple("/contact/thanks/", f"Message sent | {BRAND}", "Your message to Which Frost was sent.",
            "Message sent", "<p>Thanks, your message was sent. We will reply by email.</p>",
-           "Message sent", noindex=True)
+           "Message sent")
 
 def not_found():
     body = '''<article class="prose"><h1>Page not found</h1>

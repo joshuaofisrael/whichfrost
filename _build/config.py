@@ -2,11 +2,15 @@
 """Site-wide constants. SITE_INDEXABLE is the one noindex switch.
 
 False (default): every page carries <meta name="robots" content="noindex, follow">.
-True: content pages are indexable. The 404 and the contact thanks page stay noindex.
+True: content pages are indexable. Only the 404 page stays noindex.
 
 Leave this False until whichfrost.com is on DNS and the launch build is intentional.
 `python3 _build/build.py --launch` forces True for that run without editing this file.
 Paths are always root-relative, and the build always writes CNAME as whichfrost.com.
+
+GA4_ID is the Google Analytics 4 measurement id. Keep it "" until the owner pastes a
+G- id from the Google Analytics admin. `python3 _build/check.py --launch` fails while
+it is empty. The id is public once a visitor allows gtag. Do not put a secret here.
 """
 SITE_INDEXABLE = False
 
@@ -18,6 +22,8 @@ PUBLISHED_H = "16 Nov 2026"
 INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
 # Shared JI Ventures Analytics 2 token, same beacon Which Cabin uses at launch. Launch build only.
 CF_BEACON_TOKEN = "eac63f2b5dbc4539a2d95249baab6472"
+# Owner pastes G-XXXXXXXXXX. Empty on purpose until then. Launch check fails while empty.
+GA4_ID = ""
 CONTACT_EMAIL = "joshuaofisrael@gmail.com"
 MAX_MILES = 50.0
 
