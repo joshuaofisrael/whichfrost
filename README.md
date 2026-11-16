@@ -6,9 +6,9 @@ Joshua Israel Ventures LLC. The LLC name appears only on the legal pages.
 
 ## Status
 
-v1 is built with `noindex` on every page. The switch is `SITE_INDEXABLE` in `_build/config.py` (default `False`). Paths are always root relative. `CNAME` is `whichfrost.com`.
+v1 is built with `noindex` on every page. The switch is `SITE_INDEXABLE` in `_build/config.py` (default `False`). Paths are always root relative. `CNAME` is `whichfrost.com`. `GA4_ID` in that file stays empty until a `G-` measurement id is pasted in.
 
-`python3 _build/build.py --launch` turns on indexing and the Cloudflare beacon for that run. Do that only after whichfrost.com DNS points at GitHub Pages. Today the domain answers at a registrar parking address, not at this site.
+`python3 _build/build.py --launch` turns on indexing, the Cloudflare beacon, and the Google Analytics 4 loader for that run. The tag is requested only after the visitor allows analytics. `python3 _build/check.py --launch` fails while `GA4_ID` is empty. Do the launch build only after whichfrost.com DNS points at GitHub Pages. Today the domain answers at a registrar parking address, not at this site. The exact command is in `LAUNCH-NOTES.md`.
 
 ## Build
 

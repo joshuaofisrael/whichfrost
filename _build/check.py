@@ -3,19 +3,32 @@
 
 Fails on broken JSON-LD, missing or extra noindex, a missing canonical, more than one h1,
 the owner or LLC name outside legal pages, a missing legal line, a broken root-relative link,
-a duplicate title, a meta description over 155 characters, a city page that does not cite its
-station, or a frost date on the page that is not the cached NOAA value.
+a duplicate title, a title of 60 characters or more, a duplicate or over-long meta description,
+a city page that does not cite its station, or a frost date on the page that is not the cached
+NOAA value.
+
+With --launch (or SITE_INDEXABLE), also fails if GA4_ID is empty, if any page lacks the
+Cloudflare beacon, or if any page lacks the GA4 loader. Only 404.html may contain noindex.
 """
 import glob, json, os, re, sys, html
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import SITE_INDEXABLE, US, ALIASES
+from config import SITE_INDEXABLE, GA4_ID
 from build import fmt_date, load_cities
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAUNCH = "--launch" in sys.argv or SITE_INDEXABLE
 LEGAL = {"terms", "privacy", "disclaimer", "copyright", "ad-disclosure"}
+FOOTER = ["/about/", "/contact/", "/privacy/", "/terms/", "/disclaimer/", "/copyright/", "/ad-disclosure/", "/image-policy/"]
+GA4_OK = re.fullmatch(r"G-[A-Z0-9]+", GA4_ID or "")
 bad = 0
 titles = {}
+descs = {}
+
+def wants_faq(rel):
+    if rel in ("index.html", "states/index.html", "zones/index.html", "methodology/index.html"):
+        return True
+    parts = rel.split("/")
+    return len(parts) == 3 and parts[2] == "index.html" and parts[0] in ("states", "zones")
 
 def fail(msg):
     global bad
@@ -23,6 +36,8 @@ def fail(msg):
     print(msg)
 
 files = [f for f in glob.glob(ROOT + "/**/*.html", recursive=True) if "/_build/" not in f]
+if LAUNCH and not GA4_OK:
+    fail("GA4_ID empty")
 for f in files:
     raw = open(f, encoding="utf-8").read()
     rel = os.path.relpath(f, ROOT)
@@ -45,13 +60,26 @@ for f in files:
     if h1s != 1:
         fail(f"h1count {rel} {h1s}")
     if LAUNCH:
-        if rel != "404.html" and not rel.startswith("contact/thanks") and "noindex" in raw:
+        if rel == "404.html":
+            if "noindex" not in raw:
+                fail("404-indexable")
+        elif "noindex" in raw:
             fail(f"noindex {rel}")
         if "static.cloudflareinsights.com/beacon.min.js" not in raw:
             fail(f"nobeacon {rel}")
+        if "wfLoadGA4" not in raw or "https://www.googletagmanager.com/gtag/js?id=" not in raw:
+            fail(f"noga4 {rel}")
+        if "gtag('consent', 'default'" not in raw or "'analytics_storage': 'denied'" not in raw:
+            fail(f"noconsent {rel}")
+        if 'src="/assets/consent.js' not in raw:
+            fail(f"noconsentjs {rel}")
+        if GA4_OK and GA4_ID not in raw:
+            fail(f"ga4missing {rel}")
     else:
         if "noindex" not in raw:
             fail(f"preview-missing-noindex {rel}")
+        if "wfLoadGA4" in raw or "static.cloudflareinsights.com/beacon.min.js" in raw:
+            fail(f"preview-analytics {rel}")
     if "—" in raw or "–" in raw:
         fail(f"dash {rel}")
     title = re.search(r"<title>(.*?)</title>", raw)
@@ -60,13 +88,18 @@ for f in files:
     else:
         t = html.unescape(title.group(1))
         titles.setdefault(t, []).append(rel)
-        if len(t) > 70:
-            print("longtitle", len(t), t)
+        if len(t) >= 60:
+            fail(f"longtitle {len(t)} {rel} {t}")
     desc = re.search(r'<meta name="description" content="(.*?)"', raw)
     if not desc:
         fail(f"nodesc {rel}")
-    elif len(html.unescape(desc.group(1))) > 155:
-        fail(f"longdesc {len(html.unescape(desc.group(1)))} {rel}")
+    else:
+        d = html.unescape(desc.group(1))
+        descs.setdefault(d, []).append(rel)
+        if len(d) > 155:
+            fail(f"longdesc {len(d)} {rel}")
+        if not d:
+            fail(f"emptydsc {rel}")
     for link in re.findall(r'(?:href|src)="(/[^"#?]*)', raw):
         if link.startswith("//"):
             fail(f"prefix {rel} {link}")
@@ -74,10 +107,35 @@ for f in files:
         target = os.path.join(ROOT, link.lstrip("/"))
         if not (os.path.isfile(target) or os.path.isfile(os.path.join(target, "index.html"))):
             fail(f"broken {rel} {link}")
+    for href in FOOTER:
+        if f'href="{href}"' not in raw:
+            fail(f"footer {href} {rel}")
+    if "Cookie settings" not in raw:
+        fail(f"nocookiesettings {rel}")
+    if 'property="og:title"' not in raw or 'property="og:description"' not in raw or 'property="og:url"' not in raw:
+        fail(f"og {rel}")
+    if rel == "index.html" and '"WebSite"' not in raw:
+        fail("nowebsite")
+    if rel not in ("index.html", "404.html") and '"BreadcrumbList"' not in raw:
+        fail(f"nobreadcrumb {rel}")
+    if rel != "404.html" and '"Article"' not in raw:
+        fail(f"noarticle {rel}")
+    if wants_faq(rel) and '"FAQPage"' not in raw:
+        fail(f"nofaq {rel}")
+    if rel == "privacy/index.html" and ("Google Analytics 4" not in raw or "Cloudflare Web Analytics" not in raw):
+        fail("privacy-names")
+    for m in re.finditer(r"<img\b[^>]*>", raw, re.I):
+        pre = raw[max(0, m.start() - 400):m.start()]
+        a = pre.rfind("<a ")
+        if a == -1 or pre.rfind("</a>") > a or 'href="/image-policy/"' not in pre[a:]:
+            fail(f"photo {rel}")
 
 for t, fs in titles.items():
     if len(fs) > 1:
         fail(f"duptitle {t} {fs}")
+for d, fs in descs.items():
+    if len(fs) > 1:
+        fail(f"dupdesc {d} {fs}")
 
 # City pages must repeat the cached station and the cached 32 F 50 percent date.
 cities = load_cities()
@@ -126,6 +184,8 @@ if not os.path.isfile(os.path.join(ROOT, "llms.txt")):
     fail("llms")
 # sitemap locs should exist
 sm = open(os.path.join(ROOT, "sitemap.xml"), encoding="utf-8").read()
+if sm.count("<lastmod>") != sm.count("<loc>") or "<lastmod>" not in sm:
+    fail("sitemap lastmod")
 for loc in re.findall(r"<loc>(.*?)</loc>", sm):
     if "noindex" in loc:
         fail(f"sitemap noindex url {loc}")
