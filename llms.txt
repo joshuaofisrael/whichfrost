@@ -227,7 +227,7 @@ City pages use /{state}/{city}/ with the state postal code.
 - https://whichfrost.com/ia/cedar-rapids/ Cedar Rapids, Iowa
 - https://whichfrost.com/ia/davenport/ Davenport, Iowa
 - https://whichfrost.com/ia/des-moines/ Des Moines, Iowa
-- https://whichfrost.com/id/boise-city/ Boise City, Idaho
+- https://whichfrost.com/id/boise/ Boise, Idaho
 - https://whichfrost.com/id/meridian/ Meridian, Idaho
 - https://whichfrost.com/id/nampa/ Nampa, Idaho
 - https://whichfrost.com/il/aurora/ Aurora, Illinois

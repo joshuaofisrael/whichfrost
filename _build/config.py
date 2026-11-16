@@ -46,6 +46,7 @@ ALIASES = {
     "San Buenaventura (Ventura)": ("Ventura", "ventura"),
     "Macon-Bibb County": ("Macon", "macon"),
     "Indianapolis city": ("Indianapolis", "indianapolis"),
+    "Boise City": ("Boise", "boise"),
 }
 
 NEIGHBORS = {
