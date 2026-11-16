@@ -23,7 +23,7 @@ INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
 # Shared JI Ventures Analytics 2 token, same beacon Which Cabin uses at launch. Launch build only.
 CF_BEACON_TOKEN = "eac63f2b5dbc4539a2d95249baab6472"
 # Owner pastes G-XXXXXXXXXX. Empty on purpose until then. Launch check fails while empty.
-GA4_ID = ""
+GA4_ID = "G-31Y999EGZ5"
 CONTACT_EMAIL = "joshuaofisrael@gmail.com"
 MAX_MILES = 50.0
 
