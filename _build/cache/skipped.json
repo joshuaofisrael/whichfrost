@@ -1,0 +1,11 @@
+{
+  "skipped_large": [
+    {
+      "name": "Urban Honolulu",
+      "st": "HI",
+      "pop": 344967,
+      "miles": 110.3,
+      "station": "USC00511004"
+    }
+  ]
+}

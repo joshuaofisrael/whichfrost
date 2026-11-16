@@ -1,0 +1,18 @@
+{
+  "retrieved": "2026-11-16",
+  "normals": "NOAA NCEI U.S. Climate Normals 1991-2020, annual/seasonal, v1.0.1 (file c20230404)",
+  "normals_url": "https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals",
+  "dataset": "https://www.ncei.noaa.gov/data/normals-annualseasonal/1991-2020/",
+  "methodology": "https://www.ncei.noaa.gov/data/normals-annualseasonal/1991-2020/doc/Normals_Calculation_Methodology_2020.pdf",
+  "inventory": "https://www.ncei.noaa.gov/data/normals-annualseasonal/1991-2020/doc/inventory_30yr.txt",
+  "population": "U.S. Census Bureau, Population Estimates Program, sub-est2024.csv, POPESTIMATE2024, incorporated places",
+  "population_url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/cities/totals/sub-est2024.csv",
+  "gazetteer": "U.S. Census Bureau 2024 Gazetteer place and ZCTA national files",
+  "zones": "2023 USDA Plant Hardiness Zone Map, ZIP code tables published by the PRISM Climate Group, Oregon State University",
+  "zones_url": "https://planthardiness.ars.usda.gov/",
+  "zones_data": "https://prism.oregonstate.edu/phzm/",
+  "max_miles": 50.0,
+  "pop_floor": 100000,
+  "city_count": 341,
+  "station_count": 306
+}
