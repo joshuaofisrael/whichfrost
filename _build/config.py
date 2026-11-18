@@ -19,6 +19,10 @@ DOMAIN = "whichfrost.com"
 BASE_URL = "https://whichfrost.com/"
 PUBLISHED = "2026-11-16"          # first publication of this dataset. Never replace with a build clock.
 PUBLISHED_H = "16 Nov 2026"
+# Explicit, one time publish date for a page added after launch (not the build clock).
+# Set this to the day a given page actually went live, then leave it fixed.
+GROWING_SEASON_PAGES_PUBLISHED = "2026-11-18"
+GROWING_SEASON_PAGES_PUBLISHED_H = "18 Nov 2026"
 INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
 # Shared JI Ventures Analytics 2 token, same beacon Which Cabin uses at launch. Launch build only.
 CF_BEACON_TOKEN = "eac63f2b5dbc4539a2d95249baab6472"

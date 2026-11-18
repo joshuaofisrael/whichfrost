@@ -10,7 +10,8 @@ import json, os, sys, html, math, re, shutil
 from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (SITE_INDEXABLE, BRAND, DOMAIN, BASE_URL, PUBLISHED, PUBLISHED_H,
-                    INDEXNOW_KEY, CF_BEACON_TOKEN, GA4_ID, CONTACT_EMAIL, US, ALIASES, NEIGHBORS, MONTHS)
+                    INDEXNOW_KEY, CF_BEACON_TOKEN, GA4_ID, CONTACT_EMAIL, US, ALIASES, NEIGHBORS, MONTHS,
+                    GROWING_SEASON_PAGES_PUBLISHED, GROWING_SEASON_PAGES_PUBLISHED_H)
 from planting import SOURCES, GA_SOURCE, GA_MONTHS, offset_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -212,7 +213,7 @@ window.wfLoadGA4 = function () {
 </script>
 <script src="/assets/consent.js?v=1" defer></script>"""
 
-def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, legal=False, nav_current=None):
+def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, legal=False, nav_current=None, lastmod=None):
     title = re.sub(r"\s+", " ", title).strip()
     if len(title) >= 60:
         raise SystemExit(f"title {len(title)} >= 60: {title}")
@@ -259,12 +260,13 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
         raise SystemExit("emdash in " + path)
     open(disk_for(path), "w", encoding="utf-8").write(doc)
     if not noindex:
-        SITEMAP.append(path)
+        SITEMAP.append((path, lastmod or PUBLISHED))
     return doc
 
-def article(headline, path):
+def article(headline, path, published=None):
+    when = published or PUBLISHED
     return {"@context": "https://schema.org", "@type": "Article", "headline": headline,
-            "datePublished": PUBLISHED, "dateModified": PUBLISHED,
+            "datePublished": when, "dateModified": when,
             "image": url("/og.png"),
             "author": {"@type": "Organization", "name": BRAND, "url": BASE_URL},
             "publisher": {"@type": "Organization", "name": BRAND, "url": BASE_URL,
@@ -573,6 +575,126 @@ def zone_page(zone, cities):
          body, [("/", "Home"), ("/zones/", "Zones"), (path, f"Zone {zone}")],
          [article(f"USDA zone {zone}", path), faq_ld(faqs)], nav_current="/zones/")
 
+def growing_season_page(cities):
+    path = "/longest-and-shortest-growing-season/"
+    data = []
+    for c in cities:
+        gsl = gsl_days(c["station_rec"]["dates"].get("prbgsl-t32fp50", ""))
+        if gsl is not None:
+            data.append((c, gsl))
+    top = max(g for _, g in data)
+    bottom_city, bottom_gsl = min(data, key=lambda x: x[1])
+    longest = sorted((d for d in data if d[1] == top), key=lambda x: -x[0]["pop"])
+    not_computed_in_longest = sum(1 for c, _ in longest if spring50(c) is None)
+    shortest = sorted(data, key=lambda x: x[1])[:20]
+
+    def row(c, gsl, rank=None):
+        sp = spring50(c) or "Not computed"
+        fa = fall50(c) or "Not computed"
+        lead = f"<td>No. {rank}</td>" if rank is not None else ""
+        return (f'{"<tr>"}{lead}<td><a href="/{c["st"].lower()}/{c["slug"]}/">{E(c["name"])}, {E(US[c["st"]])}</a></td>'
+                f"<td>{E(sp)}</td><td>{E(fa)}</td><td>{gsl:.0f} days</td></tr>")
+
+    longest_rows = "".join(row(c, g) for c, g in longest)
+    shortest_rows = "".join(row(c, g, i + 1) for i, (c, g) in enumerate(shortest))
+    h1 = "US cities with the longest and shortest growing season"
+    desc = (f"NOAA median growing season at 32°F: {len(longest)} of {len(data)} cities on this site tie for longest "
+            f"at {top:.0f} days, {bottom_city['name']}, {US[bottom_city['st']]} is shortest at {bottom_gsl:.0f}.")
+    faqs = [
+        ("What does a 365 day growing season mean?",
+         "NOAA's growing season length at 32°F is the number of days, in the middle year of the 1991 to 2020 record, "
+         "between the last spring freeze and the first fall freeze at that station. A figure of 365 days means the "
+         "station's own history did not show a 32°F freeze often enough, in at least half of those years, for NOAA to "
+         "compute a season shorter than the full year. It does not mean a 32°F reading is impossible there, only that "
+         "NOAA's median figure for this element is the full year."),
+        ("Why does a city with a 365 day season still say Not computed for the spring frost date?",
+         "Growing season length and the last spring 32°F date are two different NOAA elements, computed from different "
+         "parts of the station record. A station can have enough data for NOAA to publish a growing season figure while "
+         "not having enough qualifying years to publish a separate last spring 32°F date, which NOAA then flags -9999. "
+         "This site's cities with no computed 32°F frost date page lists which stations that happens at."),
+        ("Does this list change often?",
+         "No. It is built from the NOAA 1991 to 2020 climate normals, the same one time retrieval every city page on "
+         "this site uses. NOAA does not update that record until the next normals period, expected in 2030."),
+    ]
+    body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
+<p class="byline">By {BRAND}. Published {GROWING_SEASON_PAGES_PUBLISHED_H}, from NOAA data retrieved {PUBLISHED_H}.</p>
+<div class="answer"><p>{len(longest)} of the {len(data)} cities on this site tie for the longest NOAA median growing season at 32°F, {top:.0f} days. The shortest is {E(bottom_city["name"])}, {E(US[bottom_city["st"]])}, at {bottom_gsl:.0f} days.</p></div>
+<p class="note">These are 1991 to 2020 climate normals, not a forecast. A given year can run shorter or longer than the median. This is not agricultural advice.</p>
+<h2>Cities tied for the longest growing season</h2>
+<p>NOAA computed a 365 day median growing season at 32°F for these {len(longest)} cities, sorted by 2024 Census population. {not_computed_in_longest} of them also have no separate computed last spring 32°F date (shown as Not computed below); see <a href="/no-computed-frost-date/">why that NOAA element is not computed</a> for those cities.</p>
+<div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Last spring 32°F</th><th>First fall 32°F</th><th>Growing season</th></tr></thead><tbody>{longest_rows}</tbody></table></div>
+<h2>Cities with the shortest growing season</h2>
+<p>The 20 cities on this site with the shortest NOAA median growing season at 32°F.</p>
+<div class="tablewrap"><table class="list"><thead><tr><th>Rank</th><th>City</th><th>Last spring 32°F</th><th>First fall 32°F</th><th>Growing season</th></tr></thead><tbody>{shortest_rows}</tbody></table></div>
+<h2>How this list is built</h2>
+<p>The growing season figure is NOAA's own prbgsl-t32fp50 element from the same 1991 to 2020 Climate Normals by station archive every city page on this site cites, read from the same per station cache (see <a href="/methodology/">sources and methods</a>). It is not calculated here by subtracting the spring and fall dates; NOAA publishes it as its own figure, and a station can carry it even where the separate spring or fall date is not computed.</p>
+<h2>Related pages</h2>
+<p>Open a city above for its full freeze probability table and any planting calendar. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/states/">All states</a>. <a href="/zones/">All USDA zones</a>.</p>
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
+<li><a href="{NOAA_METHOD}" rel="nofollow noopener">NOAA Normals Calculation Methodology 2020</a></li>
+<li><a href="{CENSUS_POP}" rel="nofollow noopener">U.S. Census Bureau, Population Estimates Program, sub-est2024</a></li>
+</ul>
+<p class="note">Normals retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive (v1.0.1, file dated 20230404), the same retrieval used on every city page.</p></section>
+</article>'''
+    crumbs = [("/", "Home"), (path, "Longest and shortest growing season")]
+    schemas = [article(h1, path, GROWING_SEASON_PAGES_PUBLISHED), faq_ld(faqs)]
+    page(path, "US cities with the longest and shortest growing season", desc, body, crumbs, schemas,
+         lastmod=GROWING_SEASON_PAGES_PUBLISHED)
+
+def no_computed_frost_page(cities):
+    path = "/no-computed-frost-date/"
+    rows_data = [c for c in cities if spring50(c) is None]
+    rows_data.sort(key=lambda c: (US[c["st"]], c["name"]))
+    states_here = sorted({US[c["st"]] for c in rows_data})
+
+    def row(c):
+        t36 = fmt_date(c["station_rec"]["dates"].get("prblst-t36fp50", "")) or "Not published"
+        gsl = gsl_days(c["station_rec"]["dates"].get("prbgsl-t32fp50", ""))
+        gsl_s = f"{gsl:.0f} days" if gsl is not None else "Not computed"
+        return (f'<tr><td><a href="/{c["st"].lower()}/{c["slug"]}/">{E(c["name"])}, {E(US[c["st"]])}</a></td>'
+                f"<td>{E(t36)}</td><td>{E(gsl_s)}</td></tr>")
+
+    rows = "".join(row(c) for c in rows_data)
+    h1 = "Cities with no computed 32°F frost date"
+    desc = (f"{len(rows_data)} of {len(cities)} cities on this site have no NOAA computed last spring 32°F freeze date, "
+            f"all in {', '.join(states_here)}. What NOAA computed instead is on this page.")
+    faqs = [
+        ("Why does my city's page say Not computed for the 32°F frost date?",
+         "NOAA flags an element -9999 when the station's history did not show that threshold crossed in enough of the "
+         "1991 to 2020 years to compute a median, or set a measurement flag of Y for the same reason. For these cities "
+         "that is the last spring freeze at 32°F. The NOAA Normals Calculation Methodology 2020 document, linked in "
+         "the sources below, defines those flags."),
+        ("Does Not computed mean this city never freezes?",
+         "No single normals record can promise that. It means NOAA's own station file did not have enough qualifying "
+         "years at 32°F to publish a median for that one element. NOAA did compute the milder 36°F threshold for the "
+         "same stations, shown on this page, and the growing season length element separately."),
+        ("Which states have cities with no computed 32°F date?",
+         f"On this site: {', '.join(states_here)}. That follows from which stations NOAA picked for frost products in "
+         "this build, not a claim that every warm weather city in the United States is missing this element."),
+    ]
+    body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
+<p class="byline">By {BRAND}. Published {GROWING_SEASON_PAGES_PUBLISHED_H}, from NOAA data retrieved {PUBLISHED_H}.</p>
+<div class="answer"><p>{len(rows_data)} of the {len(cities)} cities on this site have no NOAA computed median last spring freeze at 32°F. All of them are in {E(", ".join(states_here))}, and all show a 365 day median growing season at 32°F, meaning the station's own record rarely or never crosses that threshold.</p></div>
+<p class="note">These are 1991 to 2020 climate normals, not a forecast. A given year can still freeze. This is not agricultural advice.</p>
+<h2>What NOAA computed instead</h2>
+<p>For these stations NOAA did compute a milder 36°F last spring date, shown below, plus the growing season length used on <a href="/longest-and-shortest-growing-season/">the longest and shortest growing season page</a>. The 32°F table on each city page still shows the 90 and 10 percent figures where NOAA published them.</p>
+<div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Last spring 36°F (50 percent)</th><th>Growing season at 32°F (days)</th></tr></thead><tbody>{rows}</tbody></table></div>
+<h2>Related pages</h2>
+<p>Open a city above for its full freeze probability table. <a href="/longest-and-shortest-growing-season/">Longest and shortest growing season</a>. <a href="/states/">All states</a>. <a href="/zones/">All USDA zones</a>.</p>
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
+<li><a href="{NOAA_METHOD}" rel="nofollow noopener">NOAA Normals Calculation Methodology 2020</a></li>
+</ul>
+<p class="note">Normals retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive (v1.0.1, file dated 20230404), the same retrieval used on every city page.</p></section>
+</article>'''
+    crumbs = [("/", "Home"), (path, "No computed frost date")]
+    schemas = [article(h1, path, GROWING_SEASON_PAGES_PUBLISHED), faq_ld(faqs)]
+    page(path, "Cities with no computed 32°F frost date", desc, body, crumbs, schemas,
+         lastmod=GROWING_SEASON_PAGES_PUBLISHED)
+
 def home(cities):
     by_state = {}
     for c in cities:
@@ -618,6 +740,8 @@ def home(cities):
 <p class="note">No city page in this build for {E(", ".join(missing))}. Those states have no incorporated place of 100,000 people within 50 miles of a station with a published frost product, or, for Hawaii, the Honolulu airport station did not get a computed 32°F date.</p>
 <h2>Large cities</h2><ul class="cols">{"".join(feats)}</ul>
 <h2>Hardiness zones</h2><p>What to plant now, by USDA zone: {zlinks}.</p>
+<h2>More lookups</h2>
+<p><a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
 {faq_html(faqs)}
 </article>'''
     page("/", "Which frost date should I use? | Which Frost",
@@ -641,6 +765,7 @@ def states_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>Pick a state to see every city page, the median 32°F dates, and the zone. Each state page links back to its cities.</p>
 <ul class="cols">{"".join(items)}</ul>
+<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
 {faq_html(faqs)}</article>'''
     page("/states/", "Which frost date should I use by state",
          "State by state frost dates for the largest U.S. cities, from NOAA 1991 to 2020 climate normals.",
@@ -663,6 +788,7 @@ def zones_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>A USDA zone is the average coldest winter temperature, in 5°F steps on the 2023 map. It is not a vegetable sowing date. Open a zone for the cities in it and any state extension timing we transcribed. City pages link back here.</p>
 <ul class="cols">{"".join(items)}</ul>
+<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
 {faq_html(faqs)}
 <p class="note">Source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a> and <a href="{PRISM}" rel="nofollow noopener">PRISM ZIP tables</a>.</p>
 </article>'''
@@ -707,12 +833,14 @@ def legal_pages():
 <p>New Hampshire uses the UNH Extension fact sheet "Growing Vegetables: When to Plant Your Vegetable Garden," retrieved {PUBLISHED_H}. Offsets are counted from the NOAA date, not from the Memorial Day example in that fact sheet.</p>
 <p>Every other state has no transcribed calendar in this build. The city page says so.</p>
 <h2>Checked</h2><p>Station files and the city match were retrieved {PUBLISHED_H}. Rebuild from the cache in <code>_build/cache</code> without downloading again. Re check when NCEI publishes a new normals period.</p>
-<p>City pages are listed by <a href="/states/">state</a> and by <a href="/zones/">USDA zone</a>.</p>''', "Sources and methods",
+<p>City pages are listed by <a href="/states/">state</a> and by <a href="/zones/">USDA zone</a>, or compared directly on the <a href="/longest-and-shortest-growing-season/">longest and shortest growing season</a> and <a href="/no-computed-frost-date/">no computed frost date</a> pages.</p>''', "Sources and methods",
            faqs=[
                ("How does Which Frost pick a station?",
                 "A city is matched to the nearest NOAA station that has a frost product, using the Census Bureau 2024 Gazetteer city point. The cap is 50 miles. Farther than that, the city is skipped. Which Frost does not blend two stations."),
                ("Which planting calendars are transcribed?",
                 "Colorado uses CSU Extension GardenNotes #720. Georgia uses University of Georgia Extension Circular 943. New Hampshire uses the UNH Extension fact sheet on when to plant a vegetable garden. Every other state has no transcribed calendar in this build."),
+               ("Are there pages that compare cities to each other?",
+                "The longest and shortest growing season page and the no computed frost date page both read the same per station cache as every city page and rank or group cities by one NOAA element, without adding a new source."),
            ])
     simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost uses an original mark and no photographs of places or people.",
            "Image policy", '''<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
@@ -800,9 +928,9 @@ def extras(cities):
     robots = "".join(f"User-agent: {b}\nAllow: /\n\n" for b in bots) + f"Sitemap: {BASE_URL}sitemap.xml\n"
     open(os.path.join(ROOT, "robots.txt"), "w").write(robots)
     locs = []
-    for path in SITEMAP:
+    for path, lm in SITEMAP:
         loc = url(path)
-        locs.append(f"  <url><loc>{loc}</loc><lastmod>{PUBLISHED}</lastmod></url>")
+        locs.append(f"  <url><loc>{loc}</loc><lastmod>{lm}</lastmod></url>")
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "\n".join(locs) + "\n</urlset>\n"
     open(os.path.join(ROOT, "sitemap.xml"), "w").write(xml)
     lines = [f"# {BRAND}", "",
@@ -870,6 +998,8 @@ def main():
         zone_page(z, group)
     for c in cities:
         city_page(c, cities)
+    growing_season_page(cities)
+    no_computed_frost_page(cities)
     legal_pages()
     not_found()
     extras(cities)
