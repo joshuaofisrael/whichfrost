@@ -23,7 +23,16 @@ PUBLISHED_H = "16 Nov 2026"
 # Set this to the day a given page actually went live, then leave it fixed.
 GROWING_SEASON_PAGES_PUBLISHED = "2026-11-18"
 GROWING_SEASON_PAGES_PUBLISHED_H = "18 Nov 2026"
+# Explicit publish dates for pages whose content changed after launch (not the build clock).
+ZONE_REFRESH_PUBLISHED = "2026-11-19"
+ZONE_REFRESH_PUBLISHED_H = "19 Nov 2026"
+LEGAL_UPDATED = "2026-11-19"
+LEGAL_UPDATED_H = "19 Nov 2026"
+TOMATO_GUIDE_PUBLISHED = "2026-11-19"
+TOMATO_GUIDE_PUBLISHED_H = "19 Nov 2026"
 INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
+# Google AdSense publisher id. Head script + meta only; no ad units in v1.
+ADSENSE_PUB = "ca-pub-5681559774142917"
 # Shared JI Ventures Analytics 2 token, same beacon Which Cabin uses at launch. Launch build only.
 CF_BEACON_TOKEN = "eac63f2b5dbc4539a2d95249baab6472"
 # Owner pastes G-XXXXXXXXXX. Empty on purpose until then. Launch check fails while empty.

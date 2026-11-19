@@ -23,6 +23,21 @@ form.contact,form.search{display:grid;gap:.4rem;max-width:560px}form.contact lab
 .month{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;margin:.45rem 0}.month.is-now{background:var(--now);border-color:var(--sun);border-left:6px solid var(--sun)}
 .form-status{padding:.6rem .8rem;border-radius:6px}.form-status.ok{background:#e3f4e6;color:#0f4d1c}
 footer.site{background:var(--navy);color:#eef3f6;padding:1.5rem 0;margin-top:2rem}footer.site a{color:#ffd59a}.flinks{line-height:2}.legal-line{font-size:.9rem;color:var(--muted)}footer .legal-line{color:#cfd9de}
+.compare{background:var(--tint);border:1px solid var(--line);border-radius:8px;padding:.8rem 1rem;margin:1.4rem 0}
+.compare h2{margin-top:.2rem;font-size:1.15rem}
+.related-reads{margin:1.6rem 0 1.2rem}
+.related-reads h2{margin-bottom:.6rem}
+.related-grid{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.8rem}
+.related-card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;min-height:100%}
+.related-card:hover{border-color:var(--teal)}
+.related-card .rr-thumb{display:block;line-height:0}
+.related-card img{width:100%;height:auto;aspect-ratio:1200/630;object-fit:cover;background:var(--navy)}
+.related-card .rr-text{display:flex;flex-direction:column;gap:.35rem;text-decoration:none;color:inherit;flex:1}
+.related-card .rr-title{font-weight:700;color:var(--navy);padding:.55rem .7rem 0}
+.related-card .rr-blurb{font-size:.9rem;color:var(--muted);padding:0 .7rem .7rem}
+figure.hero-photo{margin:1rem 0 1.2rem;padding:0}
+figure.hero-photo img{width:100%;height:auto;border-radius:6px;display:block}
+figure.hero-photo figcaption{font-size:.88rem;color:var(--muted);margin-top:.4rem}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .consent{position:fixed;right:1rem;bottom:1rem;z-index:50;max-width:22rem;background:#fff;color:var(--ink);border:2px solid var(--navy);border-radius:10px;padding:.8rem 1rem;box-shadow:0 8px 24px rgba(11,57,84,.18)}
 .consent p{margin:.2rem 0 .6rem;font-size:.92rem}
