@@ -11,7 +11,10 @@ from datetime import date
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (SITE_INDEXABLE, BRAND, DOMAIN, BASE_URL, PUBLISHED, PUBLISHED_H,
                     INDEXNOW_KEY, CF_BEACON_TOKEN, GA4_ID, CONTACT_EMAIL, US, ALIASES, NEIGHBORS, MONTHS,
-                    GROWING_SEASON_PAGES_PUBLISHED, GROWING_SEASON_PAGES_PUBLISHED_H)
+                    GROWING_SEASON_PAGES_PUBLISHED, GROWING_SEASON_PAGES_PUBLISHED_H,
+                    ZONE_REFRESH_PUBLISHED, ZONE_REFRESH_PUBLISHED_H,
+                    LEGAL_UPDATED, LEGAL_UPDATED_H,
+                    TOMATO_GUIDE_PUBLISHED, TOMATO_GUIDE_PUBLISHED_H, ADSENSE_PUB)
 from planting import SOURCES, GA_SOURCE, GA_MONTHS, offset_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -233,9 +236,13 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
         beacon = ("<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' "
                   f"data-cf-beacon='{{\"token\": \"{CF_BEACON_TOKEN}\"}}'></script><!-- End Cloudflare Web Analytics -->")
         ga4 = GA4_SNIPPET.replace("__GA4__", json.dumps(GA4_ID))
+        adsense = (f'<meta name="google-adsense-account" content="{ADSENSE_PUB}">'
+                   f'<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE_PUB}" '
+                   f'crossorigin="anonymous"></script>')
     else:
         beacon = "<!-- cf-beacon: added when SITE_INDEXABLE is true -->"
         ga4 = ""
+        adsense = ""
     nav = [("Home", "/"), ("States", "/states/"), ("Zones", "/zones/"), ("Sources", "/methodology/")]
     nav_html = "".join(
         f'<a href="{href}"' + (' aria-current="page"' if nav_current == href else "") + f">{label}</a>"
@@ -247,7 +254,7 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
 <title>{E(title)}</title><meta name="description" content="{E(desc)}"><link rel="canonical" href="{canon}">
 <meta name="robots" content="{robots}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="{BRAND}"><meta property="og:title" content="{E(title)}"><meta property="og:description" content="{E(desc)}"><meta property="og:url" content="{canon}"><meta property="og:image" content="{url("/og.png")}"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css?v=2">{scripts}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css?v=3">{adsense}{scripts}
 </head><body><a class="skip" href="#main">Skip to content</a>
 <header class="site"><div class="wrap"><a class="brand" href="/">{LOGO}<span>{BRAND}</span></a><nav class="main" aria-label="Main">{nav_html}</nav></div></header>
 <main id="main" class="wrap">{crumb}{body}{legal_html}<!-- ad-slot: below-content (reserved; no ad code) --></main>
@@ -263,11 +270,12 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
         SITEMAP.append((path, lastmod or PUBLISHED))
     return doc
 
-def article(headline, path, published=None):
+def article(headline, path, published=None, modified=None, image=None):
     when = published or PUBLISHED
+    mod = modified or when
     return {"@context": "https://schema.org", "@type": "Article", "headline": headline,
-            "datePublished": when, "dateModified": when,
-            "image": url("/og.png"),
+            "datePublished": when, "dateModified": mod,
+            "image": url(image or "/og.png"),
             "author": {"@type": "Organization", "name": BRAND, "url": BASE_URL},
             "publisher": {"@type": "Organization", "name": BRAND, "url": BASE_URL,
                           "logo": {"@type": "ImageObject", "url": url("/logo.png")}},
@@ -521,6 +529,109 @@ def state_page(st, cities):
          body, [("/", "Home"), ("/states/", "States"), (path, state)],
          [article(f"{state} frost dates", path), faq_ld(faqs)], nav_current="/states/")
 
+def related_reads(items):
+    """items: list of (href, title, blurb). Thumbs use the site og mark until article photos exist.
+
+    Each <img> must sit inside an <a href="/image-policy/"> (site photo check).
+    """
+    cards = []
+    for href, title, blurb in items:
+        cards.append(
+            '<li class="related-card">'
+            '<a class="rr-thumb" href="/image-policy/">'
+            '<img src="/og.png" width="240" height="126" alt="Which Frost site mark (image policy)" loading="lazy">'
+            '</a>'
+            f'<a class="rr-text" href="{href}">'
+            f'<span class="rr-title">{E(title)}</span>'
+            f'<span class="rr-blurb">{E(blurb)}</span></a></li>')
+    return ('<section class="related-reads" aria-label="Related pages">'
+            '<h2>Related pages</h2>'
+            f'<ul class="related-grid">{"".join(cards)}</ul></section>')
+
+def compare_box(zone, near, states):
+    near_links = ", ".join(f'<a href="/zones/{z}/">zone {E(z)}</a>' for z in near) or "none on this site"
+    state_sample = states[:4]
+    state_html = ", ".join(f'<a href="/states/{st.lower()}/">{E(US[st])}</a>' for st in state_sample)
+    more = "" if len(states) <= 4 else ', and <a href="/zones/">more on the zones hub</a>'
+    return f'''<aside class="compare" aria-label="Check another lookup">
+<h2>Check another zone or city</h2>
+<p>Compare adjacent hardiness bands: {near_links}. Or open a state hub ({state_html}{more}) and pick a city for its NOAA 50 percent frost date.</p>
+<p class="note">A USDA zone is winter cold, not a planting day. The frost date lives on the city page.</p>
+</aside>'''
+
+def zone_frost_section(zone, cities):
+    """Zone-specific NOAA facts from the same per-station cache as city pages. Not a planting calendar."""
+    rows = []
+    for c in cities:
+        sp = spring50(c)
+        fa = fall50(c)
+        gsl = gsl_days(c["station_rec"]["dates"].get("prbgsl-t32fp50", ""))
+        rows.append((c, sp, fa, gsl))
+    with_spring = [t for t in rows if t[1]]
+    with_gsl = [t for t in rows if t[3] is not None]
+    n = len(cities)
+    n_spring = len(with_spring)
+    parts = [f'<h2>Frost dates inside zone {E(zone)}</h2>']
+    city_word = "cities" if n != 1 else "city"
+    parts.append(
+        f'<p>USDA zone {E(zone)} is a winter minimum band. The frost dates below are NOAA 1991 to 2020 medians at 32°F for the '
+        f'{n} large {city_word} on this site that fall in that band. They are medians, not guarantees for any single year.</p>')
+    if with_spring:
+        def spring_raw(c):
+            return c["station_rec"]["dates"].get("prblst-t32fp50", "99/99")
+        earliest = min(with_spring, key=lambda t: spring_raw(t[0]))
+        latest = max(with_spring, key=lambda t: spring_raw(t[0]))
+        ec, esp, efa, egsl = earliest
+        lc, lsp, lfa, lgsl = latest
+        if ec["slug"] == lc["slug"] and ec["st"] == lc["st"]:
+            bit = f'<p class="answer">The only city on this site in zone {E(zone)} is '
+            bit += f'<a href="/{ec["st"].lower()}/{ec["slug"]}/">{E(ec["name"])}, {E(US[ec["st"]])}</a>, '
+            bit += f'with a median last spring 32°F freeze of {E(esp)}'
+            if efa:
+                bit += f' and a median first fall 32°F freeze of {E(efa)}'
+            if egsl is not None:
+                bit += f". NOAA's median growing season at 32°F is {egsl} days"
+            bit += '.</p>'
+            parts.append(bit)
+        else:
+            parts.append(
+                f'<p class="answer">Across {n_spring} cities with a computed spring date, the earliest median last spring 32°F freeze is '
+                f'{E(esp)} in <a href="/{ec["st"].lower()}/{ec["slug"]}/">{E(ec["name"])}, {E(US[ec["st"]])}</a>. '
+                f'The latest is {E(lsp)} in <a href="/{lc["st"].lower()}/{lc["slug"]}/">{E(lc["name"])}, {E(US[lc["st"]])}</a>.</p>')
+            if with_gsl:
+                shortest = min(with_gsl, key=lambda t: t[3])
+                longest = max(with_gsl, key=lambda t: t[3])
+                sc, _, _, sg = shortest
+                Lc, _, _, Lg = longest
+                if sc["slug"] == Lc["slug"] and sc["st"] == Lc["st"]:
+                    parts.append(
+                        f"<p>NOAA's median growing season at 32°F for cities in this zone on this site is {sg} days "
+                        f'(<a href="/{sc["st"].lower()}/{sc["slug"]}/">{E(sc["name"])}</a>).</p>')
+                else:
+                    parts.append(
+                        f"<p>NOAA's median growing season at 32°F in this zone runs from {sg} days in "
+                        f'<a href="/{sc["st"].lower()}/{sc["slug"]}/">{E(sc["name"])}, {E(US[sc["st"]])}</a> '
+                        f'to {Lg} days in <a href="/{Lc["st"].lower()}/{Lc["slug"]}/">{E(Lc["name"])}, {E(US[Lc["st"]])}</a>.</p>')
+    else:
+        parts.append(
+            '<p>None of the cities in this zone on this site have a computed NOAA last spring 32°F date. '
+            'See <a href="/no-computed-frost-date/">cities with no computed 32°F frost date</a>.</p>')
+    trs = []
+    for c, sp, fa, gsl in sorted(rows, key=lambda t: (-t[0]["pop"])):
+        gsl_cell = f"{gsl} days" if gsl is not None else "Not computed"
+        trs.append(
+            f'<tr><td><a href="/{c["st"].lower()}/{c["slug"]}/">{E(c["name"])}, {E(US[c["st"]])}</a></td>'
+            f'<td>{E(sp or "Not computed")}</td><td>{E(fa or "Not computed")}</td>'
+            f'<td>{E(gsl_cell)}</td></tr>')
+    parts.append(
+        '<div class="tablewrap"><table class="list"><thead><tr>'
+        '<th>City</th><th>Last spring 32°F</th><th>First fall 32°F</th><th>Growing season</th>'
+        '</tr></thead><tbody>' + "".join(trs) + '</tbody></table></div>')
+    parts.append(
+        '<p class="note">Figures are the same NOAA normals cache every city page cites '
+        f'(retrieved {PUBLISHED_H}). Open a city for the 10 and 90 percent dates and the station id.</p>')
+    return "\n".join(parts)
+
 def zone_page(zone, cities):
     path = f"/zones/{zone}/"
     zrange = next((c["zone_range"] for c in cities if c.get("zone_range")), "")
@@ -537,16 +648,23 @@ def zone_page(zone, cities):
 {months}''')
         elif st in SOURCES:
             src = SOURCES[st]
-            items = "".join(f"<li><strong>{E(g['crops'])}.</strong> {E(g['says'])}</li>" for g in src["groups"])
+            items = "".join(f'<li><strong>{E(g["crops"])}.</strong> {E(g["says"])}</li>' for g in src["groups"])
             blocks.append(f'''<h3>{E(US[st])}</h3>
-<p>{E(src["title"])} times these crops from the average last spring frost, not from the zone number. Counted dates are on each city page, using that city's NOAA 50 percent date. <a href="{src["url"]}" rel="nofollow noopener">Source</a>.</p>
+<p>{E(src["title"])} times these crops from the average last spring frost, not from the zone number. Counted dates are on each city page, using that city&#x27;s NOAA 50 percent date. <a href="{src["url"]}" rel="nofollow noopener">Source</a>.</p>
 <ul>{items}</ul>''')
         else:
             names = ", ".join(f'<a href="/{c["st"].lower()}/{c["slug"]}/">{E(c["name"])}</a>' for c in cities if c["st"] == st)
             blocks.append(f"<h3>{E(US[st])}</h3><p>No extension planting calendar is transcribed for {E(US[st])} in this build. Cities: {names}.</p>")
-    faqs = [(
-        f"Does USDA zone {zone} tell me what to plant this week?",
-        f"No. Zone {zone} is the 2023 USDA average annual extreme minimum temperature, {zrange}°F. Nurseries use it for which perennial plants can take a typical winter. Vegetable sowing dates on this site come from a state extension page counted against the city's NOAA frost date, when we have transcribed one.")]
+    faqs = [
+        (
+            f"Does USDA zone {zone} tell me what to plant this week?",
+            f"No. Zone {zone} is the 2023 USDA average annual extreme minimum temperature, {zrange}°F. Nurseries use it for which perennial plants can take a typical winter. Vegetable sowing dates on this site come from a state extension page counted against the city's NOAA frost date, when we have transcribed one.",
+        ),
+        (
+            f"What is the frost date for cities in zone {zone}?",
+            f"There is no single frost date for zone {zone}. Each city page uses the nearest NOAA station with a frost product. The table on this page lists the median last spring and first fall 32°F dates for the cities in this zone on this site. Those dates are 1991 to 2020 medians, not a forecast.",
+        ),
+    ]
     ordered = sorted({c["zone"] for c in ALL if c.get("zone")}, key=lambda z: (int(z[:-1]), z[-1]))
     here = ordered.index(zone)
     near = []
@@ -556,24 +674,46 @@ def zone_page(zone, cities):
         near.append(ordered[here + 1])
     near_html = ", ".join(f'<a href="/zones/{z}/">zone {E(z)}</a>' for z in near) or "none"
     state_links = ", ".join(f'<a href="/states/{st.lower()}/">{E(US[st])}</a>' for st in states)
+    frost_html = zone_frost_section(zone, cities)
+    mid_related = related_reads([
+        (f"/zones/{near[0]}/" if near else "/zones/", f"USDA zone {near[0]}" if near else "All USDA zones",
+         "Adjacent hardiness band on this site." if near else "Every zone with a city page."),
+        ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+         "NOAA median season length ranked across all cities."),
+        (f"/states/{states[0].lower()}/", f"{US[states[0]]} frost dates",
+         "State hub for cities that sit in this zone."),
+        ("/no-computed-frost-date/", "Cities with no computed 32°F frost date",
+         "Where NOAA left the spring 32°F date uncomputed."),
+    ])
+    end_related = related_reads([
+        ("/zones/", "All USDA zones", "Hardiness bands with city lists."),
+        ("/states/", "Frost dates by state", "Every state hub on this site."),
+        ("/methodology/", "Sources and methods", "How stations and zones are chosen."),
+        ("/longest-and-shortest-growing-season/", "Growing season extremes", "Shortest and longest NOAA seasons."),
+    ])
     body = f'''<article class="prose wide"><h1>USDA zone {E(zone)}: what to plant now</h1>
-<p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
+<p class="byline">By {BRAND}. Last verified {ZONE_REFRESH_PUBLISHED_H}.</p>
 <p class="answer">Zone {E(zone)} on the 2023 USDA Plant Hardiness Zone Map is an average annual extreme minimum of {E(zrange)}°F. It is not a frost date and not a sowing date.</p>
+{frost_html}
+{compare_box(zone, near, states)}
+{mid_related}
 <h2>Cities in this zone</h2><ul class="cols">{"".join(rows)}</ul>
 <h2>What to plant now</h2>
 <p id="now-label">Planting notes below are grouped by state, because extension calendars are not the same across a zone. With JavaScript on, the current month is marked inside any month list.</p>
 <noscript><p>Find the current month inside any month list below.</p></noscript>
 {"".join(blocks)}
-<h2>Related</h2>
+<h2>Related hubs</h2>
 <p>States with a city in this zone: {state_links}. <a href="/states/">All states</a>.</p>
 <p>Adjacent zone numbers on this site: {near_html}. <a href="/zones/">All zones</a>.</p>
+{end_related}
 {faq_html(faqs)}
-<p class="note">Zone source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a>, ZIP tables from the <a href="{PRISM}" rel="nofollow noopener">PRISM Climate Group</a>. A city's zone is the ZIP code whose centroid is nearest the city center.</p>
+<p class="note">Zone source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a>, ZIP tables from the <a href="{PRISM}" rel="nofollow noopener">PRISM Climate Group</a>. A city's zone is the ZIP code whose centroid is nearest the city center. Frost dates: <a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI 1991 to 2020 climate normals</a>.</p>
 </article>'''
     page(path, f"USDA zone {zone}: what to plant now",
-         f"USDA zone {zone} is {zrange}°F. Cities in that zone, plus planting notes only where a state extension calendar was transcribed.",
+         f"USDA zone {zone} ({zrange}°F): NOAA frost dates for cities in this band, plus planting notes where transcribed.",
          body, [("/", "Home"), ("/zones/", "Zones"), (path, f"Zone {zone}")],
-         [article(f"USDA zone {zone}", path), faq_ld(faqs)], nav_current="/zones/")
+         [article(f"USDA zone {zone}", path, published=PUBLISHED, modified=ZONE_REFRESH_PUBLISHED), faq_ld(faqs)],
+         nav_current="/zones/", lastmod=ZONE_REFRESH_PUBLISHED)
 
 def growing_season_page(cities):
     path = "/longest-and-shortest-growing-season/"
@@ -797,15 +937,15 @@ def zones_index(cities):
          body, [("/", "Home"), ("/zones/", "Zones")],
          [article("USDA zones", "/zones/"), faq_ld(faqs)], nav_current="/zones/")
 
-def simple(path, title, desc, h1, inner, crumb, legal=False, noindex=False, faqs=None):
+def simple(path, title, desc, h1, inner, crumb, legal=False, noindex=False, faqs=None, lastmod=None, published=None, modified=None):
     if faqs:
         inner += faq_html(faqs)
     body = f'<article class="prose"><h1>{E(h1)}</h1>{inner}</article>'
     crumbs = [("/", "Home"), (path, crumb)]
-    schemas = [] if noindex else [article(h1, path)]
+    schemas = [] if noindex else [article(h1, path, published=published, modified=modified or lastmod)]
     if faqs and not noindex:
         schemas.append(faq_ld(faqs))
-    page(path, title, desc, body, crumbs, schemas, noindex=noindex, legal=legal)
+    page(path, title, desc, body, crumbs, schemas, noindex=noindex, legal=legal, lastmod=lastmod)
 
 def legal_pages():
     simple("/about/", f"About {BRAND}", "What Which Frost is, and how frost dates and planting notes are chosen.",
@@ -863,25 +1003,27 @@ def legal_pages():
 <h2>Governing law</h2><p>These terms are governed by the laws of the State of Florida, without regard to conflict of law rules. Disputes will be heard in the state or federal courts in Florida, and you consent to that jurisdiction.</p>
 <h2>Changes</h2><p>We may update these terms. The date above is the latest version.</p>''', "Terms of use", legal=True)
     simple("/privacy/", f"Privacy Policy | {BRAND}", "Privacy policy for Which Frost (whichfrost.com).",
-           "Privacy policy", f'''<p>Last updated {PUBLISHED_H}. This policy explains how Which Frost (whichfrost.com), a trade name of Joshua Israel Ventures LLC, a Florida limited liability company, handles information.</p>
+           "Privacy policy", f'''<p>Last updated {LEGAL_UPDATED_H}. This policy explains how Which Frost (whichfrost.com), a trade name of Joshua Israel Ventures LLC, a Florida limited liability company, handles information.</p>
 <h2>Analytics</h2><p>Which Frost names the two analytics tools the public site uses.</p>
 <p>Cloudflare Web Analytics loads on every public page. It does not use cookies and does not track you across sites. It records basic, aggregated information such as the page, the referrer, the browser, and the country. The preview build does not load it.</p>
 <p>Google Analytics 4 loads on a public page only after you choose Allow analytics on the consent banner. The preview build does not load it. The Google tag is not requested until that choice. Until then, Consent Mode v2 defaults keep ad storage, ad user data, ad personalization, and analytics storage denied.</p>
 <h2>Contact</h2><p>If you email us or use the contact form, your name, email address, and message are used to reply. The form is delivered by FormSubmit (formsubmit.co). We keep messages only as long as needed to respond.</p>
-<h2>Advertising</h2><p>The site shows no ads today. If we add ads later, for example through Google AdSense, this policy will be updated first. You would be able to opt out of personalized advertising at <a href="https://www.google.com/settings/ads" rel="nofollow noopener">Google Ads Settings</a> and <a href="https://www.aboutads.info/choices/" rel="nofollow noopener">aboutads.info/choices</a>.</p>
-<h2 id="cookies">Cookies</h2><p>Which Frost does not set its own cookie. The allow or refuse choice is stored in this browser's local storage as wf-ga4-consent, with the value granted or denied, so the banner can stay dismissed. If you allow analytics, Google Analytics 4 may set its own cookies and receive the page address. Ad storage stays denied, because the site shows no ads.</p>
+<h2>Advertising</h2><p>Which Frost loads the Google AdSense script and a <code>google-adsense-account</code> meta tag (publisher {ADSENSE_PUB}) on public pages so the site can be verified for Google AdSense. No ad units are placed on pages today, so you should not see display ads. If we start showing ads, they will be labeled, and this policy and the <a href="/ad-disclosure/">advertising disclosure</a> will say so. You can opt out of personalized advertising at <a href="https://www.google.com/settings/ads" rel="nofollow noopener">Google Ads Settings</a> and <a href="https://www.aboutads.info/choices/" rel="nofollow noopener">aboutads.info/choices</a>.</p>
+<h2 id="cookies">Cookies</h2><p>Which Frost does not set its own cookie. The allow or refuse choice is stored in this browser's local storage as wf-ga4-consent, with the value granted or denied, so the banner can stay dismissed. If you allow analytics, Google Analytics 4 may set its own cookies and receive the page address. Consent Mode v2 still defaults ad storage, ad user data, and ad personalization to denied while no ad units are shown.</p>
 <p>Choose Cookie settings in the footer to change your choice. Blocking cookies and local storage does not block the frost dates. See the <a href="/ad-disclosure/">advertising disclosure</a>.</p>
 <h2>Hosting</h2><p>The site is hosted on GitHub Pages, which may log IP addresses for security and operations.</p>
 <h2>Your rights</h2><p>You can ask us to access, correct, or delete personal information we hold. Use the <a href="/contact/">contact page</a>. Residents of some states and countries may have additional rights, which we will honor.</p>
 <h2>Children</h2><p>The site is a general audience reference and is not directed at children under 13. We do not knowingly collect personal information from children.</p>
-<h2>Changes</h2><p>We will post changes on this page with a new date.</p>''', "Privacy", legal=True)
+<h2>Changes</h2><p>We will post changes on this page with a new date.</p>''', "Privacy", legal=True,
+           lastmod=LEGAL_UPDATED, published=PUBLISHED, modified=LEGAL_UPDATED)
     simple("/copyright/", f"Copyright and DMCA | {BRAND}", "Copyright and DMCA notice for Which Frost (whichfrost.com).",
            "Copyright and DMCA", f'''<p>Last updated {PUBLISHED_H}. Original text, compilation, and design on whichfrost.com are owned by Joshua Israel Ventures LLC. Climate figures are U.S. government work, cited to the station. Extension wording is summarized and linked, not copied as a full publication.</p>
 <h2>DMCA notice</h2><p>If you believe a page infringes your copyright, email the contact address on the <a href="/contact/">contact page</a> with: your signature, the work you own, the URL on this site, your contact information, a statement that you have a good faith belief the use is not authorized, and a statement under penalty of perjury that your notice is accurate and that you are the owner or the owner's agent. We will review complete notices and remove material that we agree is infringing.</p>
 <h2>Counter notice</h2><p>If you believe a removal was a mistake, send a counter notice with the same contact path, including your signature, the material and URL, a statement under penalty of perjury that the material was removed by mistake, and consent to the jurisdiction of the federal court in your district (or in Florida, if you are outside the United States).</p>''', "Copyright and DMCA", legal=True)
-    simple("/ad-disclosure/", f"Advertising disclosure | {BRAND}", "Which Frost shows no ads today. This page says how ads would be labeled if that changes.",
-           "Advertising disclosure", f'''<p>Last updated {PUBLISHED_H}. Which Frost shows no advertisements and has no affiliate links. Nothing on the site is paid placement by a seed company, a tool maker, or an extension.</p>
-<p>If ads are added later, they will be labeled, and this page will say who serves them. Editorial frost dates will not be for sale. Which Frost is a trade name of Joshua Israel Ventures LLC.</p>''', "Advertising disclosure", legal=True)
+    simple("/ad-disclosure/", f"Advertising disclosure | {BRAND}", "Which Frost has AdSense verification tags but no ad units yet. How ads will be labeled.",
+           "Advertising disclosure", f'''<p>Last updated {LEGAL_UPDATED_H}. Which Frost has no affiliate links. Nothing on the site is paid placement by a seed company, a tool maker, or an extension. Editorial frost dates are not for sale.</p>
+<p>The public pages load the Google AdSense script and a publisher meta tag ({ADSENSE_PUB}) for site verification. No ad units are placed today, so pages should not show display ads. If that changes, ads will be labeled as advertising, and this page will name the network. Which Frost is a trade name of Joshua Israel Ventures LLC.</p>''', "Advertising disclosure", legal=True,
+           lastmod=LEGAL_UPDATED, published=PUBLISHED, modified=LEGAL_UPDATED)
     simple("/contact/", f"Contact {BRAND}", "Contact Which Frost by email about a station, a date, or a correction.",
            "Contact us", f'''<p>Questions and corrections go to <a href="mailto:{CONTACT_EMAIL}">{CONTACT_EMAIL}</a>.</p>
 <h2>Corrections</h2><p>Send the page address, the station id, and what looks wrong. We update the verified date when we re check the NOAA file.</p>
@@ -922,6 +1064,9 @@ def extras(cities):
     open(os.path.join(ROOT, "CNAME"), "w").write(DOMAIN + "\n")
     open(os.path.join(ROOT, ".nojekyll"), "w").write("")
     open(os.path.join(ROOT, INDEXNOW_KEY + ".txt"), "w").write(INDEXNOW_KEY + "\n")
+    # AdSense ads.txt (publisher verification). No ad units on pages yet.
+    open(os.path.join(ROOT, "ads.txt"), "w").write(
+        f"google.com, pub-{ADSENSE_PUB.split('ca-pub-')[-1]}, DIRECT, f08c47fec0942fa0\n")
     bots = ["*", "Googlebot", "Bingbot", "Mediapartners-Google", "OAI-SearchBot", "ChatGPT-User",
             "GPTBot", "PerplexityBot", "Perplexity-User", "ClaudeBot", "Claude-SearchBot", "Claude-User",
             "Google-Extended", "Applebot", "Applebot-Extended", "DuckAssistBot", "Amazonbot", "CCBot", "Bytespider"]
