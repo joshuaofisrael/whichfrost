@@ -715,6 +715,127 @@ def zone_page(zone, cities):
          [article(f"USDA zone {zone}", path, published=PUBLISHED, modified=ZONE_REFRESH_PUBLISHED), faq_ld(faqs)],
          nav_current="/zones/", lastmod=ZONE_REFRESH_PUBLISHED)
 
+def tomato_guide_page(cities):
+    """Evergreen guide: when to plant tomatoes relative to the NOAA last frost date."""
+    path = "/guides/when-to-plant-tomatoes/"
+    img = "/assets/images/tomato-seedlings-frost-dawn.webp"
+    index = {(c["st"], c["slug"]): c for c in cities}
+    examples = [
+        ("TX", "austin"),
+        ("CO", "denver"),
+        ("GA", "atlanta"),
+        ("NH", "manchester"),
+        ("FL", "jacksonville"),
+        ("ND", "fargo"),
+    ]
+    # CSU GardenNotes #720: tomato in "Very tender", typically 2 or more weeks after last frost.
+    # UNH vegetable timing: set out 1 to 2 weeks after last frost.
+    def after_days(city, days):
+        raw = city["station_rec"]["dates"].get("prblst-t32fp50", "")
+        if not re.match(r"\d{2}/\d{2}$", raw or ""):
+            return None
+        month, day = int(raw[:2]), int(raw[3:])
+        from datetime import date as dtdate, timedelta
+        # Non-leap reference year keeps February offsets stable for display.
+        dt = dtdate(2019, month, day) + timedelta(days=days)
+        return f"{MONTHS[dt.month - 1]} {dt.day}"
+
+    rows = []
+    for st, slug in examples:
+        c = index[(st, slug)]
+        sp = spring50(c) or "Not computed"
+        note = "See city page"
+        if st == "CO" and spring50(c):
+            note = f"CSU very tender window starts about {after_days(c, 14)} (14 days after the NOAA median)"
+        elif st == "NH" and spring50(c):
+            note = f"UNH transplant window about {after_days(c, 7)} to {after_days(c, 14)}"
+        else:
+            note = "Use your state extension after this frost date; no tomato calendar transcribed here"
+        rows.append(
+            f'<tr><td><a href="/{st.lower()}/{slug}/">{E(c["name"])}, {E(US[st])}</a></td>'
+            f'<td>{E(c.get("zone") or "")}</td><td>{E(sp)}</td><td>{E(note)}</td></tr>')
+
+    faqs = [
+        (
+            "When should I plant tomatoes after the last frost?",
+            "University extensions treat tomatoes as a warm season crop. UF/IFAS says to wait until the danger of frost has passed. UC ANR Publication 8159 says to sow seed indoors 6 to 8 weeks before the last spring frost date and to transplant after frost danger has passed. Texas A&M AgriLife Path to the Plate says to set out spring transplants after the danger of frost has passed, or be ready to cover them. On this site, Colorado's transcribed CSU guide places tomato in a very tender group typically 2 or more weeks after the average last spring frost, and New Hampshire's transcribed UNH chart says transplants are safe 1 to 2 weeks after the last frost.",
+        ),
+        (
+            "Is the NOAA 50 percent frost date safe enough for tomatoes?",
+            "No. The 50 percent date is a median for 1991 to 2020, not a promise that the last freeze is over. City pages also show the 10 percent spring date, which is later. Extensions that say wait until frost danger has passed are pointing at that caution, not at planting on the median day itself.",
+        ),
+        (
+            "Where do I look up my frost date on Which Frost?",
+            "Open a city page from the home search or a state hub. The headline date is NOAA's 50 percent last spring freeze at 32°F at the nearest station with a frost product. Frost dates are medians, not guarantees.",
+        ),
+    ]
+    mid = related_reads([
+        ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+         "How long the frost free stretch runs in each city."),
+        ("/zones/", "USDA zones hub", "Winter hardiness bands, not sowing dates."),
+        ("/co/denver/", "Denver frost dates", "A short season city with a CSU tomato offset."),
+        ("/nh/manchester/", "Manchester frost dates", "UNH tomato transplant window on the city page."),
+    ])
+    end = related_reads([
+        ("/states/", "Frost dates by state", "Every state hub on this site."),
+        ("/tx/austin/", "Austin frost dates", "An early median spring freeze in Texas."),
+        ("/methodology/", "Sources and methods", "How NOAA stations and calendars are chosen."),
+        ("/no-computed-frost-date/", "No computed 32°F frost date", "Warm stations where NOAA left the date blank."),
+    ])
+    compare = '''<aside class="compare" aria-label="Check another lookup">
+<h2>Look up your frost date</h2>
+<p>Open the <a href="/">city search on the home page</a>, or pick a <a href="/states/">state</a> and a city. Read the NOAA 50 percent last spring 32°F date, then apply the extension timing for your state. If this site has not transcribed your state, follow that state's cooperative extension page directly.</p>
+<p class="note">Frost dates are medians, not guarantees. This page is not agricultural advice.</p>
+</aside>'''
+    body = f'''<article class="prose wide"><h1>When to plant tomatoes after your last frost date</h1>
+<p class="byline">By {BRAND}. Published {TOMATO_GUIDE_PUBLISHED_H}.</p>
+<figure class="hero-photo">
+<a href="/image-policy/"><img src="{img}" width="1280" height="720" alt="Frost on young tomato seedlings at dawn in a garden bed"></a>
+<figcaption><a href="/image-policy/">AI-generated image</a>. Frost on young tomato seedlings at dawn. Not a photograph of a real garden.</figcaption>
+</figure>
+<div class="answer"><p>Tomato transplants go out after frost danger has passed, not on the NOAA median last frost date itself. Extensions describe that wait as "after frost danger," and the calendars this site has transcribed put tomatoes about 1 to 2 weeks (New Hampshire) or 2 or more weeks (Colorado) after the average last spring frost.</p></div>
+<p class="note">Frost dates on Which Frost are 1991 to 2020 NOAA medians, not a forecast for this year. A cold spring can still freeze after the 50 percent date. This is not agricultural advice.</p>
+<h2>What extensions say about tomato timing</h2>
+<p><a href="https://gardeningsolutions.ifas.ufl.edu/plants/edibles/vegetables/tomatoes/" rel="nofollow noopener">UF/IFAS Gardening Solutions: Tomatoes</a> (checked 19 Nov 2026) says tomatoes are a warm weather crop and tells gardeners to wait until the danger of frost has passed before putting plants in the ground.</p>
+<p><a href="https://anrcatalog.ucanr.edu/Details.aspx?itemNo=8159" rel="nofollow noopener">UC ANR Publication 8159, Growing Tomatoes in the Home Garden</a> (checked 19 Nov 2026) says to sow seed indoors 6 to 8 weeks before the last spring frost date for your area, harden plants off for a week to 10 days, and transplant after the danger of frost has passed.</p>
+<p><a href="https://mytexas.ag.tamu.edu/publications/tomatoes-path-to-the-plate/" rel="nofollow noopener">Texas A&amp;M AgriLife, Tomatoes Path to the Plate</a> (HORT-PU-163, original publish date September 2023; checked 19 Nov 2026) says to set out spring tomato plants after the danger of frost has passed or be prepared to cover them, and for fall crops to plant about 100 days before the first expected frost.</p>
+<p>On this site, the only tomato day counts we print are from calendars we transcribed. <a href="https://extension.colostate.edu/resource/vegetable-planting-guide/" rel="nofollow noopener">CSU Extension GardenNotes #720</a> (reviewed September 2024) lists tomato with very tender crops, typically 2 or more weeks after the average last spring frost. The <a href="https://extension.unh.edu/resource/growing-vegetables-when-plant-your-vegetable-garden-fact-sheet" rel="nofollow noopener">UNH Extension vegetable timing fact sheet</a> (retrieved 16 Nov 2026) says tomato transplants are safe 1 to 2 weeks after the last frost, with seed started 6 to 8 weeks before transplanting. Those counted windows appear on Colorado and New Hampshire city pages.</p>
+{compare}
+{mid}
+<h2>Example cities on this site</h2>
+<p>Each frost date below is the NOAA 50 percent last spring freeze at 32°F from the same cache every city page uses (retrieved {PUBLISHED_H}). The notes column only shows a counted tomato window where this site already transcribed that state's extension chart.</p>
+<div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Zone</th><th>Last spring 32°F</th><th>Tomato note on this site</th></tr></thead><tbody>
+{"".join(rows)}
+</tbody></table></div>
+<p>Open any city above for the 10 percent spring date (the more cautious marker) and the full freeze table. For states without a transcribed calendar, use the frost date as the lookup, then read that state's extension rather than inventing a national tomato calendar here.</p>
+<h2>How to use a frost date for tomatoes</h2>
+<ol>
+<li>Find your city on <a href="/">Which Frost</a> and read the median last spring 32°F date.</li>
+<li>Check the 10 percent spring date on the same page. Planting on the 50 percent date still leaves a later freeze possible in the normals record.</li>
+<li>If your state has a transcribed calendar on this site (Colorado, Georgia month list, or New Hampshire), use that page's tomato or warm season row. Otherwise follow your state extension's tomato guide, which will usually say to wait until frost danger has passed.</li>
+<li>Watch a short range forecast the week you transplant. Extensions that mention covering plants are describing frost protection, not a different frost date.</li>
+</ol>
+{end}
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
+<li><a href="https://gardeningsolutions.ifas.ufl.edu/plants/edibles/vegetables/tomatoes/" rel="nofollow noopener">UF/IFAS Gardening Solutions: Tomatoes</a> (checked 19 Nov 2026)</li>
+<li><a href="https://anrcatalog.ucanr.edu/Details.aspx?itemNo=8159" rel="nofollow noopener">UC ANR Publication 8159, Growing Tomatoes in the Home Garden</a> (checked 19 Nov 2026)</li>
+<li><a href="https://mytexas.ag.tamu.edu/publications/tomatoes-path-to-the-plate/" rel="nofollow noopener">Texas A&amp;M AgriLife, Tomatoes Path to the Plate (HORT-PU-163)</a> (checked 19 Nov 2026)</li>
+<li><a href="https://extension.colostate.edu/resource/vegetable-planting-guide/" rel="nofollow noopener">CSU Extension GardenNotes #720</a> (reviewed September 2024)</li>
+<li><a href="https://extension.unh.edu/resource/growing-vegetables-when-plant-your-vegetable-garden-fact-sheet" rel="nofollow noopener">UNH Extension, Growing Vegetables: When to Plant Your Vegetable Garden</a> (retrieved 16 Nov 2026)</li>
+</ul>
+<p class="note">Last verified {TOMATO_GUIDE_PUBLISHED_H}. Normals retrieved {PUBLISHED_H}.</p></section>
+</article>'''
+    title = "When to plant tomatoes after your last frost"
+    desc = "Plant tomatoes after frost danger passes. Use your city NOAA last frost date plus UF/IFAS, UC ANR, Texas A&M, CSU, or UNH timing."
+    page(path, title, desc, body,
+         [("/", "Home"), (path, "When to plant tomatoes")],
+         [article(title, path, published=TOMATO_GUIDE_PUBLISHED, modified=TOMATO_GUIDE_PUBLISHED, image=img),
+          faq_ld(faqs)],
+         lastmod=TOMATO_GUIDE_PUBLISHED)
+
+
 def growing_season_page(cities):
     path = "/longest-and-shortest-growing-season/"
     data = []
@@ -881,7 +1002,7 @@ def home(cities):
 <h2>Large cities</h2><ul class="cols">{"".join(feats)}</ul>
 <h2>Hardiness zones</h2><p>What to plant now, by USDA zone: {zlinks}.</p>
 <h2>More lookups</h2>
-<p><a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/guides/when-to-plant-tomatoes/">When to plant tomatoes after your last frost</a>. <a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
 {faq_html(faqs)}
 </article>'''
     page("/", "Which frost date should I use? | Which Frost",
@@ -905,7 +1026,7 @@ def states_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>Pick a state to see every city page, the median 32°F dates, and the zone. Each state page links back to its cities.</p>
 <ul class="cols">{"".join(items)}</ul>
-<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/guides/when-to-plant-tomatoes/">When to plant tomatoes after your last frost</a>. <a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
 {faq_html(faqs)}</article>'''
     page("/states/", "Which frost date should I use by state",
          "State by state frost dates for the largest U.S. cities, from NOAA 1991 to 2020 climate normals.",
@@ -928,7 +1049,7 @@ def zones_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>A USDA zone is the average coldest winter temperature, in 5°F steps on the 2023 map. It is not a vegetable sowing date. Open a zone for the cities in it and any state extension timing we transcribed. City pages link back here.</p>
 <ul class="cols">{"".join(items)}</ul>
-<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/guides/when-to-plant-tomatoes/">When to plant tomatoes after your last frost</a>. <a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
 {faq_html(faqs)}
 <p class="note">Source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a> and <a href="{PRISM}" rel="nofollow noopener">PRISM ZIP tables</a>.</p>
 </article>'''
@@ -982,9 +1103,10 @@ def legal_pages():
                ("Are there pages that compare cities to each other?",
                 "The longest and shortest growing season page and the no computed frost date page both read the same per station cache as every city page and rank or group cities by one NOAA element, without adding a new source."),
            ])
-    simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost uses an original mark and no photographs of places or people.",
-           "Image policy", '''<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
-<p>City pages do not use photos. There is no photograph on this site. If a later page adds an image, it will be original or clearly licensed, this page will name it, and the image will link here.</p>''', "Image policy")
+    simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost image marks and AI-generated article photos, and how they are labeled.",
+           "Image policy", '''<p>The logo, favicon, and social (og) image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
+<p>City, state, and zone lookup pages do not use news photos. Guide articles that carry a hero photo use a single realistic, news-style image generated for that page. Those photos are labeled AI-generated in the caption, and the image links here. They are not photographs of a real garden, person, or place.</p>
+<p>If a page needs a photo that is not yet on the site, that page stays out of the live sitemap until the image is added.</p>''', "Image policy")
     simple("/disclaimer/", f"Disclaimer | {BRAND}", "Which Frost publishes climate averages, not a forecast and not agricultural, legal, or insurance advice.",
            "Disclaimer", f'''<p>Last updated {PUBLISHED_H}.</p>
 <h2>Averages, not a forecast</h2><p>Frost dates are 30 year climate normals. A given year can freeze earlier or later than the median. Nothing on this site is a weather forecast. Check a forecast if you need the next few nights.</p>
@@ -1088,6 +1210,7 @@ def extras(cities):
     lines.append("## Zones")
     for z in sorted(set(c["zone"] for c in cities if c.get("zone")), key=lambda z: (int(z[:-1]), z[-1])):
         lines.append(f"- {url('/zones/' + z + '/')}")
+    lines += ["", "## Guides", f"- {url('/guides/when-to-plant-tomatoes/')} When to plant tomatoes after your last frost"]
     lines += ["", "## Cities", "City pages use /{state}/{city}/ with the state postal code."]
     for c in sorted(cities, key=lambda c: (c["st"], c["name"])):
         lines.append(f"- {url('/' + c['st'].lower() + '/' + c['slug'] + '/')} {c['name']}, {US[c['st']]}")
@@ -1145,6 +1268,7 @@ def main():
         city_page(c, cities)
     growing_season_page(cities)
     no_computed_frost_page(cities)
+    tomato_guide_page(cities)
     legal_pages()
     not_found()
     extras(cities)
