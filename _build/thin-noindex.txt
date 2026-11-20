@@ -1,6 +1,8 @@
 # Pages with under ~150 words of page-specific text (5-gram uniqueness vs the rest of the site),
 # set to noindex,follow and kept out of the sitemap for AdSense low-value-content review (20 Nov 2026).
 # Remove a path from this list once the page has real, unique substance.
+# states/ak was removed on 20 Nov 2026 after a station-estimate note and a
+# zone 5a comparison that only this state has. Do not put it back.
 ca/berkeley
 ca/burbank
 ca/daly-city
@@ -19,7 +21,6 @@ ca/rialto
 ca/richmond
 ca/santa-clarita
 ca/temecula
-states/ak
 states/al
 states/ar
 states/ct

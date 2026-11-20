@@ -14,7 +14,8 @@ from config import (SITE_INDEXABLE, BRAND, DOMAIN, BASE_URL, PUBLISHED, PUBLISHE
                     GROWING_SEASON_PAGES_PUBLISHED, GROWING_SEASON_PAGES_PUBLISHED_H,
                     ZONE_REFRESH_PUBLISHED, ZONE_REFRESH_PUBLISHED_H,
                     LEGAL_UPDATED, LEGAL_UPDATED_H,
-                    TOMATO_GUIDE_PUBLISHED, TOMATO_GUIDE_PUBLISHED_H, ADSENSE_PUB)
+                    TOMATO_GUIDE_PUBLISHED, TOMATO_GUIDE_PUBLISHED_H, ADSENSE_PUB,
+                    ANCHORAGE_REFRESH, ANCHORAGE_REFRESH_H)
 from planting import SOURCES, GA_SOURCE, GA_MONTHS, offset_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,6 +35,13 @@ FOOT = ("Which Frost lists median last and first frost dates for U.S. cities fro
         "These are long term averages, not a forecast.")
 NOAA_HOME = "https://www.ncei.noaa.gov/products/land-based-station/us-climate-normals"
 NOAA_METHOD = "https://www.ncei.noaa.gov/data/normals-annualseasonal/1991-2020/doc/Normals_Calculation_Methodology_2020.pdf"
+NWS_FROST = "https://forecast.weather.gov/glossary.php?word=frost"
+NWS_FREEZE = "https://forecast.weather.gov/glossary.php?word=Freeze"
+NWS_COLD = "https://www.weather.gov/safety/cold-ww"
+NWS_HAZ = "https://www.weather.gov/news/243009-cold-hazard-simplification"
+NWS_SCN = "https://www.weather.gov/media/notification/pdf_2023_24/scn23-44_public_program_text_products_freeze_cold_aab.pdf"
+NWS_RAH = "https://www.weather.gov/rah/FrostFreezemaps"
+UAF_GARLIC = "https://www.uaf.edu/ces/publications/database/gardening/garlic.php"
 CENSUS_POP = "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/cities/totals/sub-est2024.csv"
 PHZM = "https://planthardiness.ars.usda.gov/"
 PRISM = "https://prism.oregonstate.edu/phzm/"
@@ -271,7 +279,7 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
 <title>{E(title)}</title><meta name="description" content="{E(desc)}"><link rel="canonical" href="{canon}">
 <meta name="robots" content="{robots}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="{BRAND}"><meta property="og:title" content="{E(title)}"><meta property="og:description" content="{E(desc)}"><meta property="og:url" content="{canon}"><meta property="og:image" content="{url("/og.png")}"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css?v=3">{adsense}{scripts}
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/style.css?v=4">{adsense}{scripts}
 </head><body><a class="skip" href="#main">Skip to content</a>
 <header class="site"><div class="wrap"><a class="brand" href="/">{LOGO}<span>{BRAND}</span></a><nav class="main" aria-label="Main">{nav_html}</nav></div></header>
 <main id="main" class="wrap">{crumb}{body}{legal_html}<!-- ad-slot: below-content (reserved; no ad code) --></main>
@@ -410,6 +418,80 @@ def planting_block(city, cities):
     return '''<h2>Planting calendar</h2>
 <p>This page does not print a vegetable planting calendar for this state. Which Frost only prints timing transcribed from that state's cooperative extension, and this build does not have one yet. The frost table above is the NOAA normal for the station named here. See <a href="/methodology/">sources and methods</a>.</p>'''
 
+def lookup_city(cities, st, slug):
+    for c in cities:
+        if c["st"] == st and c["slug"] == slug:
+            return c
+    raise SystemExit("missing city " + st + "/" + slug)
+
+def season_days(c):
+    return gsl_days(c["station_rec"]["dates"].get("prbgsl-t32fp50", ""))
+
+def season_place(city, cities):
+    ranked = []
+    for c in cities:
+        g = season_days(c)
+        if g is not None:
+            ranked.append((g, c))
+    ranked.sort(key=lambda t: (t[0], t[1]["st"], t[1]["name"]))
+    g = season_days(city)
+    shorter = sum(1 for x, _ in ranked if x < g)
+    return g, shorter + 1, len(ranked), ranked[0][1], ranked[0][0]
+
+def city_link(c):
+    return f'<a href="/{c["st"].lower()}/{c["slug"]}/">{E(c["name"])}</a>'
+
+def anchorage_refresh_block(city, cities):
+    """Station-specific reading of the three NOAA thresholds, plus zone 5a peers.
+    Numbers come from the same cache as the tables. Not a second frost dataset.
+    """
+    msp = lookup_city(cities, "MN", "minneapolis")
+    mad = lookup_city(cities, "WI", "madison")
+    bil = lookup_city(cities, "MT", "billings")
+    bend = lookup_city(cities, "OR", "bend")
+    raw32 = city["station_rec"]["dates"].get("prblst-t32fp50", "")
+    raw28 = city["station_rec"]["dates"].get("prblst-t28fp50", "")
+    t36 = fmt_date(city["station_rec"]["dates"].get("prblst-t36fp50", ""))
+    t28 = fmt_date(raw28)
+    f28 = fmt_date(city["station_rec"]["dates"].get("prbfst-t28fp50", ""))
+    gap = int(raw32[3:5]) - int(raw28[3:5]) if raw32[:2] == raw28[:2] else None
+    if gap is None:
+        raise SystemExit("anchorage 28/32 spring dates are not in the same month")
+    g, rank, n, shortest, short_g = season_place(city, cities)
+    if rank == 2 and shortest["slug"] == "bend":
+        rank_bit = (f"That {g} day season is the second shortest among {n} cities on this site with a computed NOAA figure. "
+                    f"Only {city_link(shortest)}, {E(US[shortest['st']])}, is shorter, at {short_g:.0f} days.")
+    else:
+        rank_bit = (f"Among {n} cities on this site with a computed NOAA growing season, this one ranks {rank} "
+                    f"(shortest is {city_link(shortest)} at {short_g:.0f} days).")
+    peers = (
+        f'{city_link(msp)} (last 32°F {E(spring50(msp))}, {season_days(msp):.0f} days), '
+        f'{city_link(mad)} ({E(spring50(mad))}, {season_days(mad):.0f} days), and '
+        f'{city_link(bil)} ({E(spring50(bil))}, {season_days(bil):.0f} days)')
+    mid = related_reads([
+        ("/states/ak/", "Alaska frost dates",
+         "Why Anchorage is the only Alaska city here, and how the zone 5a peers compare."),
+        ("/zones/5a/", "USDA zone 5a",
+         "The winter band Anchorage shares, with each city's NOAA frost date."),
+        (f"/{msp['st'].lower()}/{msp['slug']}/", f"{msp['name']} frost dates",
+         f"Same zone, median last 32°F freeze on {spring50(msp)}."),
+        ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+         f"Anchorage at {g} days sits near the short end of the NOAA list."),
+    ])
+    return f'''<h2>What 36°F, 32°F, and 28°F mean on this station</h2>
+<p>The 50 percent spring dates above are {E(t36)} at 36°F, {E(spring50(city))} at 32°F, and {E(t28)} at 28°F. The 50 percent first fall date at 28°F is {E(f28)}. Those are 1991 to 2020 medians at Eagle River Nature Center, not a warning for a given night, and not a guarantee that this year will match them.</p>
+<p>The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as ice crystals on the ground or on plants. It often shows up with the thermometer still in the middle 30s, because the surface cools below the air. A frost advisory, in that glossary, is for widespread frost in the growing season, usually with surface temperatures in the middle 30s. <a href="{NWS_RAH}" rel="nofollow noopener">NWS Raleigh</a> publishes a local version of the same idea: 33 to 36°F for a frost advisory, 32°F or lower for a freeze warning, and 28°F or lower for a hard freeze. That office's cutoffs are not a national rule. Other offices set their own.</p>
+<p>The <a href="{NWS_FREEZE}" rel="nofollow noopener">glossary entry for a freeze</a> is surface air expected at 32°F or below over a wide area for a climatologically significant time. A hard freeze, on the same page, is 28°F or lower for an extended period, which the glossary says kills most vegetation. The <a href="{NWS_COLD}" rel="nofollow noopener">NWS cold weather page</a> uses the same split for action: a freeze warning when the forecast goes below 32°F for a long period (some crops and garden plants die), and it says temperatures below 28°F for an extended period can kill most of them. On this station the median last 28°F date and the median last 32°F date are {gap} days apart ({E(t28)} versus {E(spring50(city))}).</p>
+<p>A separate Hard Freeze Warning is no longer its own product. <a href="{NWS_SCN}" rel="nofollow noopener">Service Change Notice 23-44</a> (updated 26 March 2024) set the change for on or about 1 October 2024: the hard freeze watch and warning were folded into the freeze watch and warning, and the warning text can still say "hard freeze" when the forecast low is 28°F or lower. The <a href="{NWS_HAZ}" rel="nofollow noopener">NWS hazard simplification note</a> describes the same consolidation. Both were checked {ANCHORAGE_REFRESH_H}.</p>
+<p>{rank_bit} Both figures are NOAA's own growing season element, listed on the <a href="/longest-and-shortest-growing-season/">season ranking</a>. This site does not subtract the spring date from the fall date to invent a third number.</p>
+<p><a href="{UAF_GARLIC}" rel="nofollow noopener">UAF Cooperative Extension HGA-00047</a> (Growing Garlic in Alaska, revised 27 May 2025, checked {ANCHORAGE_REFRESH_H}) calls a killing frost the first autumn night the air reaches about 32°F, and says to plant garlic a week or two after that, or four to six weeks before the ground freezes, generally from the middle of September to the middle of October. This station's median first 32°F date is {E(fall50(city))}, inside that wide window. UAF points gardeners to the Alaska Garden Helper for a local date. This page does not turn the garlic note into one planting day.</p>
+<aside class="compare" aria-label="Check another city">
+<h2>Check another zone 5a city</h2>
+<p>Anchorage is USDA zone 5a, the same winter band as {peers}. The frost dates are not the same number. The <a href="/states/ak/">Alaska page</a> lists every zone 5a city on this site, and <a href="/{bend["st"].lower()}/{bend["slug"]}/">{E(bend["name"])}</a> is the short season comparison, in zone {E(bend.get("zone") or "")} rather than 5a.</p>
+<p class="note">A USDA zone is the average coldest winter temperature, not a planting day. These dates are medians, not a guarantee for this year.</p>
+</aside>
+{mid}'''
+
 def city_page(city, cities):
     st = city["st"]
     name = city["name"]
@@ -488,31 +570,192 @@ def city_page(city, cities):
         sources.append((GA_SOURCE["title"], GA_SOURCE["url"]))
     elif st in SOURCES:
         sources.append((SOURCES[st]["title"], SOURCES[st]["url"]))
+    is_anchorage = st == "AK" and city["slug"] == "anchorage"
+    verified = ANCHORAGE_REFRESH_H if is_anchorage else PUBLISHED_H
+    anchorage_html = ""
+    end_related = ""
+    source_note = (f"Normals retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive "
+                   "(v1.0.1, file dated 20230404). Zone ZIP tables retrieved the same day.")
+    if is_anchorage:
+        title = "Last frost date in Anchorage: around May 16"
+        desc = ("Anchorage median last freeze: May 16 at 32°F and May 1 at 28°F, from NOAA 1991 to 2020 normals. "
+                "Zone 5a peers are earlier.")
+        faqs.append((
+            "Why is the Anchorage date an estimate?",
+            "NOAA's completeness flag on the 32°F spring element at Eagle River Nature Center is E, and the file lists 9 years. "
+            "Flag E means NOAA had at least 2 years and estimated the normal from nearby stations that have a standard record. "
+            "Which Frost prints that estimate. It does not swap in a different station."))
+        faqs.append((
+            "Does zone 5a give Anchorage the same frost date as Minneapolis?",
+            "No. Both are USDA zone 5a on this site, a winter minimum of -20 to -15°F. "
+            "Minneapolis's median last spring freeze at 32°F is April 23, and its median growing season is 175 days. "
+            "Anchorage's median last spring freeze at 32°F is May 16, and its season is 125 days. "
+            "The zone is not a planting day."))
+        sources.extend([
+            ("NWS glossary: frost", NWS_FROST),
+            ("NWS glossary: freeze and hard freeze", NWS_FREEZE),
+            ("NWS: freeze warning, freeze watch, and frost advisory", NWS_COLD),
+            ("NWS Service Change Notice 23-44 (hard freeze folded into the freeze warning, 26 March 2024)", NWS_SCN),
+            ("NWS Raleigh frost and freeze criteria (one office's local thresholds)", NWS_RAH),
+            ("UAF Cooperative Extension HGA-00047, Growing Garlic in Alaska", UAF_GARLIC),
+        ])
+        anchorage_html = anchorage_refresh_block(city, cities)
+        bend = lookup_city(cities, "OR", "bend")
+        bil = lookup_city(cities, "MT", "billings")
+        end_related = related_reads([
+            (f"/{bend['st'].lower()}/{bend['slug']}/", f"{bend['name']}, {US[bend['st']]} frost dates",
+             f"Shortest NOAA growing season on this site, {season_days(bend):.0f} days, in zone {bend.get('zone')}."),
+            (f"/{bil['st'].lower()}/{bil['slug']}/", f"{bil['name']}, {US[bil['st']]} frost dates",
+             f"Another zone 5a city. Median last 32°F freeze on {spring50(bil)}."),
+            ("/methodology/", "Sources and methods",
+             "How the nearest frost station is chosen, and what flag E means."),
+            ("/states/", "Frost dates by state",
+             "Every state hub, including the Alaska comparison."),
+        ])
+        source_note = (f"Station file retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive "
+                       f"(v1.0.1, file dated 20230404). On {ANCHORAGE_REFRESH_H} the NCEI product page still called the 1991 to 2020 "
+                       "normals the latest release and said a new set is issued about every 10 years. The freeze probability dates "
+                       "on this page were not replaced. NWS and UAF pages linked here were checked the same day. Zone ZIP tables were retrieved 16 Nov 2026.")
     src_html = "".join(f'<li><a href="{href}" rel="nofollow noopener">{E(t)}</a></li>' for t, href in sources)
     body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
-<p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
+<p class="byline">By {BRAND}. Last verified {verified}.</p>
 <div class="answer"><p>{E(lead_frost)}{E(gsl_bit)}</p>
 <p>Station {E(label)} ({E(sid)}), {E(dist)} from the city center. Elevation {s["elev_m"]} m ({elev_ft} ft, converted from the NOAA meters). {E(record)}</p>
 <p>{zone_html}</p></div>
-<p class="note">These figures are 1991 to 2020 climate normals, not a forecast. A given year can freeze earlier or later. This is not legal advice, not insurance guidance, and not agricultural advice.{E(census_note)} Census 2024 population estimate: {commas(city["pop"])}.</p>
+<p class="note">These figures are 1991 to 2020 climate normals, not a forecast and not a guarantee for this year. A given year can freeze earlier or later. This is not legal advice, not insurance guidance, and not agricultural advice.{E(census_note)} Census 2024 population estimate: {commas(city["pop"])}.</p>
 <h2>Freeze probability dates</h2>
 <p>Thresholds are the minimum temperature. 36°F is a light frost in many extension guides, 32°F is a freeze, and 28°F is a harder freeze. Blank results use NOAA's own codes, described under the tables. Spring 90 percent is an earlier date (a freeze is still likely). Spring 10 percent is a later date (only a 10 percent chance the last freeze is still to come).</p>
 {frost_table(dates)}
 <p class="note">Not computed means the file stores -9999 with measurement flag Y (not enough values). Too rare to compute means -6666 (NOAA requires at least a 10 percent chance the temperature occurs). Year round risk means -4444.</p>
+{anchorage_html}
 {planting_block(city, cities)}
+{end_related}
 <h2>More pages</h2>
 <p>Other {E(state)} cities: {sib_html}. Neighboring states: {oth_html}. This state: <a href="/states/{st.lower()}/">{E(state)}</a>. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>
 {faq_html(faqs)}
 <section class="sources"><h2>Sources</h2><ul>{src_html}</ul>
-<p class="note">Normals retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive (v1.0.1, file dated 20230404). Zone ZIP tables retrieved the same day.</p></section>
+<p class="note">{source_note}</p></section>
 </article>'''
     # zone_bit already contains an anchor and was not escaped as a whole. lead uses E() except zone_bit which is inserted raw inside a <p> that started after escaped text.
     # The paragraph above mixes escaped and raw. zone_bit is safe (we built it). Fix: the sentence "USDA zone..." is inside a <p> with zone_bit unescaped. Good.
     crumbs = [("/", "Home"), (f"/states/{st.lower()}/", state), (path, name)]
-    schemas = [article(h1, path), faq_ld(faqs)]
-    page(path, title, desc, body, crumbs, schemas, nav_current=None)
+    modified = ANCHORAGE_REFRESH if is_anchorage else None
+    schemas = [article(h1, path, published=PUBLISHED, modified=modified), faq_ld(faqs)]
+    page(path, title, desc, body, crumbs, schemas, nav_current=None, lastmod=modified)
+
+def alaska_state_page(group, all_cities):
+    """One Alaska city, an estimated station, and a zone 5a comparison that is not the city page."""
+    st = "AK"
+    state = US[st]
+    path = "/states/ak/"
+    anchorage = group[0]
+    peers = [c for c in all_cities if c.get("zone") == "5a" and spring50(c)]
+    peers.sort(key=lambda c: c["station_rec"]["dates"].get("prblst-t32fp50", "99/99"))
+    earliest, latest = peers[0], peers[-1]
+    falls = [c for c in peers if fall50(c)]
+    first_fall = min(falls, key=lambda c: c["station_rec"]["dates"].get("prbfst-t32fp50", "99/99"))
+    shortest = min(peers, key=lambda c: season_days(c) if season_days(c) is not None else 9999)
+    g, rank, n, short_city, short_g = season_place(anchorage, all_cities)
+    rows = []
+    for c in peers:
+        gsl = season_days(c)
+        rows.append(
+            f'<tr><td>{city_link(c)}, {E(US[c["st"]])}</td>'
+            f'<td>{E(spring50(c))}</td><td>{E(fall50(c) or "Not computed")}</td>'
+            f'<td>{gsl:.0f} days</td></tr>')
+    t36 = fmt_date(anchorage["station_rec"]["dates"].get("prblst-t36fp50", ""))
+    t28 = fmt_date(anchorage["station_rec"]["dates"].get("prblst-t28fp50", ""))
+    s = anchorage["station_rec"]
+    sid = s["id"]
+    label = station_label(s["name"])
+    meta = s["meta"].get("prblst-t32fp50") or {}
+    msp = lookup_city(all_cities, "MN", "minneapolis")
+    mad = lookup_city(all_cities, "WI", "madison")
+    sui = lookup_city(all_cities, "SD", "sioux-falls")
+    mid = related_reads([
+        ("/ak/anchorage/", "Anchorage frost dates",
+         "Full 10, 50, and 90 percent table, plus the UAF seed timing counted from May 16."),
+        ("/zones/5a/", "USDA zone 5a",
+         "Winter minimum band shared by Anchorage and the cities in the table below."),
+        (f"/{msp['st'].lower()}/{msp['slug']}/", f"{msp['name']} frost dates",
+         f"Earliest median last 32°F spring date in this zone on this site: {spring50(msp)}."),
+        (f"/{short_city['st'].lower()}/{short_city['slug']}/", f"{short_city['name']} frost dates",
+         f"Shortest NOAA season on this site, {short_g:.0f} days."),
+    ])
+    end = related_reads([
+        ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+         f"Anchorage ranks {rank} of {n} at {g:.0f} days."),
+        (f"/{sui['st'].lower()}/{sui['slug']}/", f"{sui['name']} frost dates",
+         f"Zone 5a. Median last 32°F freeze on {spring50(sui)}."),
+        (f"/{mad['st'].lower()}/{mad['slug']}/", f"{mad['name']} frost dates",
+         f"Zone 5a. Median last 32°F freeze on {spring50(mad)}."),
+        ("/methodology/", "Sources and methods",
+         "Station distance cap, Census population floor, and NOAA completeness flags."),
+    ])
+    h1 = "Alaska frost dates, and why zone 5a is not the frost date"
+    faqs = [
+        ("Why is Anchorage the only Alaska city on this site?",
+         "A city page is an incorporated place with a 2024 Census population of at least 100,000 whose nearest NOAA frost station is within 50 miles. "
+         f"Anchorage is the only Alaska place in this build, at a Census estimate of {anchorage['pop']:,}. "
+         "This page does not add smaller Alaska towns by copying Anchorage's dates onto them."),
+        ("Is the Anchorage frost date a full 30 year record at that station?",
+         f"No. NOAA's file for {label} ({sid}) lists {meta.get('years', 'an unstated number of')} years on the 32°F spring element, "
+         "with completeness flag E. Flag E means NOAA had at least 2 years and estimated the normal from nearby stations with a standard record. "
+         "The dates are still the published 1991 to 2020 normal. They are medians, not a guarantee for this year."),
+        ("Minneapolis is also zone 5a. Why is Anchorage's last frost later?",
+         "USDA zone 5a is the average coldest winter temperature, -20 to -15°F, not a spring frost date. "
+         f"On this site Minneapolis's median last 32°F freeze is {spring50(msp)} and the season is {season_days(msp):.0f} days. "
+         f"Anchorage's median is {spring50(anchorage)} and the season is {g:.0f} days. "
+         "The zone number does not move the frost date."),
+    ]
+    body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
+<p class="byline">By {BRAND}. Last verified {ANCHORAGE_REFRESH_H}.</p>
+<div class="answer"><p>Anchorage is the only Alaska city in this build. At {E(label)} ({E(sid)}), {E(miles_text(anchorage["miles"]))} from the city center, NOAA's median last spring freeze at 32°F is {E(spring50(anchorage))} and the median first fall freeze is {E(fall50(anchorage))}. The median growing season is {g:.0f} days. These are 1991 to 2020 medians, not a forecast and not a guarantee for a given year.</p></div>
+<p>The station file lists {E(str(meta.get("years") or ""))} years for that 32°F element and completeness flag {E(meta.get("comp") or "")}. Flag E means NOAA estimated the normal from nearby stations that have a standard record. Elevation in the file is {s["elev_m"]} m. Another station in the same area can sit at a different elevation or closer to water, and NOAA can publish a different date there. This site does not average stations. The <a href="/ak/anchorage/">Anchorage page</a> has the 10 and 90 percent columns. <a href="/methodology/">How the station is chosen</a>.</p>
+<h2>The one city</h2>
+<div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Zone</th><th>Last 32°F</th><th>First 32°F</th><th>Station distance</th></tr></thead><tbody>
+<tr><td><a href="/ak/anchorage/">Anchorage</a></td><td><a href="/zones/5a/">5a</a></td><td>{E(spring50(anchorage))}</td><td>{E(fall50(anchorage))}</td><td>{E(miles_text(anchorage["miles"]))}</td></tr>
+</tbody></table></div>
+<p class="note">Census 2024 population estimate: {anchorage["pop"]:,}. No other Alaska incorporated place of 100,000 people is inside the 50 mile station cap in this build, so the table has one row.</p>
+<h2>Same zone, later spring</h2>
+<p>Anchorage's ZIP zone is <a href="/zones/5a/">5a</a> (-20 to -15°F). Zone 5a on this site also includes cities with an earlier median last 32°F freeze. The earliest in the table is {city_link(earliest)} on {E(spring50(earliest))}. The latest is {city_link(latest)} on {E(spring50(latest))}. The shortest season in the zone is {city_link(shortest)} at {season_days(shortest):.0f} days. The earliest median first fall 32°F date in the zone is {city_link(first_fall)} on {E(fall50(first_fall))}.</p>
+<div class="tablewrap"><table class="list"><thead><tr><th>Zone 5a city</th><th>Last spring 32°F</th><th>First fall 32°F</th><th>Growing season</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>
+<p>Among {n} cities on this site with a computed NOAA growing season, Anchorage is number {rank} from the short end, at {g:.0f} days. The shortest anywhere in the build is {city_link(short_city)}, {E(US[short_city["st"]])}, at {short_g:.0f} days. <a href="/longest-and-shortest-growing-season/">The full ranking</a> uses NOAA's own season element.</p>
+<aside class="compare" aria-label="Check another lookup">
+<h2>Check another city</h2>
+<p>Open <a href="/ak/anchorage/">Anchorage</a> for the 10 and 90 percent dates and the UAF seed chart counted from {E(spring50(anchorage))}. Or open a zone 5a city with an earlier spring: {city_link(msp)}, {city_link(sui)}, {city_link(mad)}.</p>
+<p class="note">Do not plant from the zone number. The frost date is the city row.</p>
+</aside>
+{mid}
+<h2>What the three Anchorage temperatures are called</h2>
+<p>At this station the median spring dates are {E(t36)} at 36°F, {E(spring50(anchorage))} at 32°F, and {E(t28)} at 28°F. The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as ice on surfaces, often while the thermometer is still in the middle 30s. A <a href="{NWS_FREEZE}" rel="nofollow noopener">freeze</a> is widespread air at 32°F or below, and a hard freeze is 28°F or lower for long enough that the glossary says it kills most vegetation. The Anchorage page cites the warning wording and the 2024 change that folded the separate hard freeze warning into the freeze warning. Checked {ANCHORAGE_REFRESH_H}.</p>
+<p><a href="https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php" rel="nofollow noopener">UAF Cooperative Extension HGA-00134</a>, checked the same day, says wind off the water keeps soil cool around Anchorage, the Kenai, and Bristol Bay, and that a frost pocket should be planted only with frost resistant vegetables. The seed start weeks from that publication are counted on the <a href="/ak/anchorage/">city page</a> from the NOAA 50 percent date. They are not repeated here, and they are not a forecast.</p>
+<h2>Nearby states</h2>
+<p>No neighboring state has a city page in this build. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>
+{end}
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a>, station {E(s["name"])} ({E(sid)})</li>
+<li><a href="{NOAA_METHOD}" rel="nofollow noopener">NOAA Normals Calculation Methodology 2020</a></li>
+<li><a href="{CENSUS_POP}" rel="nofollow noopener">U.S. Census Bureau, sub-est2024</a></li>
+<li><a href="{PHZM}" rel="nofollow noopener">2023 USDA Plant Hardiness Zone Map</a></li>
+<li><a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary, frost</a></li>
+<li><a href="{NWS_FREEZE}" rel="nofollow noopener">NWS glossary, freeze and hard freeze</a></li>
+<li><a href="https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php" rel="nofollow noopener">UAF Cooperative Extension HGA-00134</a></li>
+</ul>
+<p class="note">Station cache retrieved {PUBLISHED_H} (NCEI v1.0.1, file dated 20230404). On {ANCHORAGE_REFRESH_H} the NCEI product page still named the 1991 to 2020 normals as the latest set. NWS and UAF pages were checked the same day. Medians, not a guarantee.</p>
+</section>
+</article>'''
+    page(path, "Alaska frost dates: Anchorage around May 16",
+         "Only Anchorage is listed for Alaska. NOAA median last 32°F freeze is May 16. Other zone 5a cities freeze earlier.",
+         body, [("/", "Home"), ("/states/", "States"), (path, state)],
+         [article(h1, path, published=PUBLISHED, modified=ANCHORAGE_REFRESH), faq_ld(faqs)],
+         nav_current="/states/", lastmod=ANCHORAGE_REFRESH)
 
 def state_page(st, cities):
+    if st == "AK":
+        alaska_state_page(cities, ALL)
+        return
     state = US[st]
     path = f"/states/{st.lower()}/"
     rows = []
@@ -558,6 +801,7 @@ def related_reads(items):
             '<a class="rr-thumb" href="/image-policy/">'
             '<img src="/og.png" width="240" height="126" alt="Which Frost site mark (image policy)" loading="lazy">'
             '</a>'
+            '<p class="note"><a href="/image-policy/">Which Frost site mark. Image policy</a></p>'
             f'<a class="rr-text" href="{href}">'
             f'<span class="rr-title">{E(title)}</span>'
             f'<span class="rr-blurb">{E(blurb)}</span></a></li>')
@@ -708,8 +952,9 @@ def zone_page(zone, cities):
         ("/methodology/", "Sources and methods", "How stations and zones are chosen."),
         ("/longest-and-shortest-growing-season/", "Growing season extremes", "Shortest and longest NOAA seasons."),
     ])
+    zone_verified = ANCHORAGE_REFRESH_H if zone == "5a" else ZONE_REFRESH_PUBLISHED_H
     body = f'''<article class="prose wide"><h1>USDA zone {E(zone)}: what to plant now</h1>
-<p class="byline">By {BRAND}. Last verified {ZONE_REFRESH_PUBLISHED_H}.</p>
+<p class="byline">By {BRAND}. Last verified {zone_verified}.</p>
 <p class="answer">Zone {E(zone)} on the 2023 USDA Plant Hardiness Zone Map is an average annual extreme minimum of {E(zrange)}°F. It is not a frost date and not a sowing date.</p>
 {frost_html}
 {compare_box(zone, near, states)}
@@ -729,8 +974,8 @@ def zone_page(zone, cities):
     page(path, f"USDA zone {zone}: what to plant now",
          f"USDA zone {zone} ({zrange}°F): NOAA frost dates for cities in this band, plus planting notes where transcribed.",
          body, [("/", "Home"), ("/zones/", "Zones"), (path, f"Zone {zone}")],
-         [article(f"USDA zone {zone}", path, published=PUBLISHED, modified=ZONE_REFRESH_PUBLISHED), faq_ld(faqs)],
-         nav_current="/zones/", lastmod=ZONE_REFRESH_PUBLISHED)
+         [article(f"USDA zone {zone}", path, published=PUBLISHED, modified=ANCHORAGE_REFRESH if zone == "5a" else ZONE_REFRESH_PUBLISHED), faq_ld(faqs)],
+         nav_current="/zones/", lastmod=ANCHORAGE_REFRESH if zone == "5a" else ZONE_REFRESH_PUBLISHED)
 
 def growing_season_page(cities):
     path = "/longest-and-shortest-growing-season/"
