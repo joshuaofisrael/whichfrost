@@ -15,7 +15,8 @@ from config import (SITE_INDEXABLE, BRAND, DOMAIN, BASE_URL, PUBLISHED, PUBLISHE
                     ZONE_REFRESH_PUBLISHED, ZONE_REFRESH_PUBLISHED_H,
                     LEGAL_UPDATED, LEGAL_UPDATED_H,
                     TOMATO_GUIDE_PUBLISHED, TOMATO_GUIDE_PUBLISHED_H, ADSENSE_PUB,
-                    ANCHORAGE_REFRESH, ANCHORAGE_REFRESH_H)
+                    ANCHORAGE_REFRESH, ANCHORAGE_REFRESH_H,
+                    HARD_FREEZE_GUIDE_PUBLISHED, HARD_FREEZE_GUIDE_PUBLISHED_H, FROST_HERO)
 from planting import SOURCES, GA_SOURCE, GA_MONTHS, offset_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -631,7 +632,7 @@ def city_page(city, cities):
 {planting_block(city, cities)}
 {end_related}
 <h2>More pages</h2>
-<p>Other {E(state)} cities: {sib_html}. Neighboring states: {oth_html}. This state: <a href="/states/{st.lower()}/">{E(state)}</a>. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>
+<p>Other {E(state)} cities: {sib_html}. Neighboring states: {oth_html}. This state: <a href="/states/{st.lower()}/">{E(state)}</a>. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>. Forecast words for the 36°F, 32°F, and 28°F columns: <a href="/guides/hard-freeze-vs-frost/">hard freeze, frost, and a freeze warning</a>.</p>
 {faq_html(faqs)}
 <section class="sources"><h2>Sources</h2><ul>{src_html}</ul>
 <p class="note">{source_note}</p></section>
@@ -728,7 +729,7 @@ def alaska_state_page(group, all_cities):
 </aside>
 {mid}
 <h2>What the three Anchorage temperatures are called</h2>
-<p>At this station the median spring dates are {E(t36)} at 36°F, {E(spring50(anchorage))} at 32°F, and {E(t28)} at 28°F. The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as ice on surfaces, often while the thermometer is still in the middle 30s. A <a href="{NWS_FREEZE}" rel="nofollow noopener">freeze</a> is widespread air at 32°F or below, and a hard freeze is 28°F or lower for long enough that the glossary says it kills most vegetation. The Anchorage page cites the warning wording and the 2024 change that folded the separate hard freeze warning into the freeze warning. Checked {ANCHORAGE_REFRESH_H}.</p>
+<p>At this station the median spring dates are {E(t36)} at 36°F, {E(spring50(anchorage))} at 32°F, and {E(t28)} at 28°F. The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as ice on surfaces, often while the thermometer is still in the middle 30s. A <a href="{NWS_FREEZE}" rel="nofollow noopener">freeze</a> is widespread air at 32°F or below, and a hard freeze is 28°F or lower for long enough that the glossary says it kills most vegetation. The <a href="/guides/hard-freeze-vs-frost/">hard freeze guide</a> puts those three words next to the warning products. The Anchorage page has the full station table. Checked {ANCHORAGE_REFRESH_H}.</p>
 <p><a href="https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php" rel="nofollow noopener">UAF Cooperative Extension HGA-00134</a>, checked the same day, says wind off the water keeps soil cool around Anchorage, the Kenai, and Bristol Bay, and that a frost pocket should be planted only with frost resistant vegetables. The seed start weeks from that publication are counted on the <a href="/ak/anchorage/">city page</a> from the NOAA 50 percent date. They are not repeated here, and they are not a forecast.</p>
 <h2>Nearby states</h2>
 <p>No neighboring state has a city page in this build. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>
@@ -1143,7 +1144,7 @@ def home(cities):
 <h2>Large cities</h2><ul class="cols">{"".join(feats)}</ul>
 <h2>Hardiness zones</h2><p>What to plant now, by USDA zone: {zlinks}.</p>
 <h2>More lookups</h2>
-<p><a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/guides/hard-freeze-vs-frost/">Hard freeze, frost, and a freeze warning</a>.</p>
 {faq_html(faqs)}
 </article>'''
     page("/", "Which frost date should I use? | Which Frost",
@@ -1167,7 +1168,7 @@ def states_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>Pick a state to see every city page, the median 32°F dates, and the zone. Each state page links back to its cities.</p>
 <ul class="cols">{"".join(items)}</ul>
-<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/guides/hard-freeze-vs-frost/">Hard freeze, frost, and a freeze warning</a>.</p>
 {faq_html(faqs)}</article>'''
     page("/states/", "Which frost date should I use by state",
          "State by state frost dates for the largest U.S. cities, from NOAA 1991 to 2020 climate normals.",
@@ -1209,6 +1210,107 @@ def simple(path, title, desc, h1, inner, crumb, legal=False, noindex=False, faqs
         schemas.append(faq_ld(faqs))
     page(path, title, desc, body, crumbs, schemas, noindex=noindex, legal=legal, lastmod=lastmod)
 
+def hard_freeze_guide(cities):
+    """NWS wording for frost, freeze, and hard freeze, plus two extension pages.
+    The hero file is assigned and may be absent. Do not invent a substitute photo.
+    """
+    path = "/guides/hard-freeze-vs-frost/"
+    anchorage = lookup_city(cities, "AK", "anchorage")
+    minneapolis = lookup_city(cities, "MN", "minneapolis")
+    raw32 = anchorage["station_rec"]["dates"].get("prblst-t32fp50", "")
+    raw28 = anchorage["station_rec"]["dates"].get("prblst-t28fp50", "")
+    t36 = fmt_date(anchorage["station_rec"]["dates"].get("prblst-t36fp50", ""))
+    t32 = spring50(anchorage)
+    t28 = fmt_date(raw28)
+    gap = int(raw32[3:5]) - int(raw28[3:5]) if raw32[:2] == raw28[:2] else None
+    uaf = "https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php"
+    uf = "https://edis.ifas.ufl.edu/publication/cv106"
+    h1 = "Hard freeze, frost, and a freeze warning are not the same thing"
+    title = "Hard freeze vs frost: what each does to plants"
+    desc = "Frost can form in the middle 30s. A freeze warning is 32°F or below. A hard freeze is 28°F, and it is no longer its own NWS product."
+    faqs = [
+        ("Is a frost the same thing as a freeze?",
+         "No. The NWS glossary describes frost as ice crystals on surfaces, often while the thermometer in the air is still in the middle 30s. "
+         "A freeze is surface air at 32°F or below over a wide area for a significant time. A garden can get frost without the air reaching 32°F."),
+        ("Does a freeze warning still cover a hard freeze?",
+         "Yes. Service Change Notice 23-44, updated 26 March 2024, folded the hard freeze watch and the hard freeze warning into the freeze watch and the freeze warning, effective on or about 1 October 2024. "
+         "The warning text can still say hard freeze when the forecast low is 28°F or lower. There is no longer a separate Hard Freeze Warning product."),
+        ("Can I treat the date on a city page as tonight's warning?",
+         "No. A city page is a 1991 to 2020 median from one NOAA station. A freeze warning is a forecast for a particular night. "
+         "The median is not a guarantee that this year will match it, and it is not agricultural advice."),
+    ]
+    mid = related_reads([
+        ("/ak/anchorage/", "Anchorage frost dates",
+         f"Worked example: median spring dates of {t36} at 36°F, {t32} at 32°F, and {t28} at 28°F."),
+        ("/states/ak/", "Alaska frost dates",
+         "Why that station is an estimate, and how other zone 5a cities differ."),
+        ("/zones/5a/", "USDA zone 5a",
+         "The winter band is not a frost date. The city rows show the spread."),
+        ("/methodology/", "Sources and methods",
+         "Which station a city page uses, and what the NOAA flags mean."),
+    ])
+    end = related_reads([
+        ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+         "NOAA's own season length, ranked for every city on this site."),
+        ("/no-computed-frost-date/", "No computed 32°F frost date",
+         "Stations where NOAA did not publish a median last spring freeze."),
+        ("/states/", "Frost dates by state",
+         "Pick a state, then a city, and read the 36, 32, and 28 degree columns."),
+        ("/zones/", "USDA zones",
+         "Winter minimum bands. Open a city for the frost date."),
+    ])
+    body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
+<p class="byline">By {BRAND}. Published {HARD_FREEZE_GUIDE_PUBLISHED_H}. Last verified {HARD_FREEZE_GUIDE_PUBLISHED_H}.</p>
+<figure class="hero-photo"><a href="/image-policy/"><img src="{FROST_HERO}" width="1200" height="675" alt="Frost on a lawn in early daylight"></a>
+<figcaption><a href="/image-policy/">AI-generated image. Image policy.</a></figcaption></figure>
+<div class="answer"><p>A frost is ice on the plant, and the air can still be in the middle 30s. A freeze warning is for air at or below 32°F. A hard freeze is 28°F or lower, long enough that the National Weather Service says it kills most vegetation. Since about 1 October 2024, a hard freeze is no longer its own warning. Those words can still appear inside a freeze warning.</p></div>
+<p class="note">The dates on this site are 1991 to 2020 medians, not a forecast for tonight and not a guarantee for this year. Nothing here is agricultural advice.</p>
+<h2>Three words, three temperatures</h2>
+<p>The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as thin ice crystals on the ground or on objects. It forms the way dew does, except the surface falls below 32°F, and it often happens with the thermometer in the middle 30s because frost is mostly radiational cooling. A frost advisory, on that same page, is for widespread frost in the growing season, usually with surface temperatures in the middle 30s. The <a href="{NWS_COLD}" rel="nofollow noopener">NWS cold weather page</a> tells a reader to be aware: areas of frost are expected or occurring, and sensitive plants are at risk.</p>
+<p>A freeze, in the <a href="{NWS_FREEZE}" rel="nofollow noopener">glossary</a>, is surface air expected at 32°F or below over a wide area for a climatologically significant time. The cold weather page marks a freeze warning as the product to act on: temperatures forecast below 32°F for a long period, a threshold it says kills some commercial crops and residential plants. A freeze watch is the earlier heads up, when widespread freezing is possible in the next 24 to 36 hours, used in autumn until the growing season ends and in spring when it starts.</p>
+<p>A hard freeze, same glossary, is surface air at 28°F or lower for an extended period, killing most types of vegetation. The cold weather page says temperatures below 28°F for an extended period can kill most commercial crops and residential plants. <a href="{NWS_RAH}" rel="nofollow noopener">NWS Raleigh</a> prints local cutoffs that match those round numbers: 33 to 36°F for a frost advisory, 32°F or lower for a freeze warning, 28°F or lower for a hard freeze. That is one office. It is not a rule that every office uses the same edges.</p>
+<div class="tablewrap"><table class="list"><caption>How the NWS names the cold, checked {HARD_FREEZE_GUIDE_PUBLISHED_H}.</caption>
+<thead><tr><th>Word</th><th>Temperature the NWS cites</th><th>Product</th></tr></thead><tbody>
+<tr><th scope="row">Frost</th><td>Often the middle 30s, ice on the surface</td><td>Frost advisory during the local growing season</td></tr>
+<tr><th scope="row">Freeze</th><td>32°F or below, widespread, for a long enough time</td><td>Freeze warning. A watch can come 24 to 36 hours ahead</td></tr>
+<tr><th scope="row">Hard freeze</th><td>28°F or lower for an extended period</td><td>No longer a separate warning. The freeze warning can say hard freeze</td></tr>
+</tbody></table></div>
+<p><a href="{NWS_SCN}" rel="nofollow noopener">Service Change Notice 23-44</a> (updated 26 March 2024) set that consolidation for on or about 1 October 2024. The hard freeze watch became a freeze watch, and the hard freeze warning became a freeze warning. The notice says the freeze warning may still use the words "hard freeze" in the body, for example in the "what" line, when the shelter temperature is forecast at 28°F or lower. The <a href="{NWS_HAZ}" rel="nofollow noopener">NWS hazard simplification note</a> describes the same change. Both pages were open on {HARD_FREEZE_GUIDE_PUBLISHED_H}.</p>
+{mid}
+<h2>What extension services say the cold does to plants</h2>
+<p>The forecast words are national. The plants are not. Two extension publications, read on {HARD_FREEZE_GUIDE_PUBLISHED_H}, draw the line in different gardens.</p>
+<p><a href="{uaf}" rel="nofollow noopener">University of Alaska Fairbanks Cooperative Extension, HGA-00134</a>, says radish, turnip, carrot, leaf lettuce, and pea seed can go in before the danger of frost is past. It also lists a longer set, including beans, that may be seeded up to two weeks before the last killing frost with little danger of loss, and then says beans freeze easily and that an early bean planting needs cover when the night falls near freezing. Tomatoes, it says, go outside after the danger of frost is past and warm weather looks likely to hold. A garden in a frost pocket should be planted only with frost resistant vegetables. A few feet of extra elevation can add days. Those are Alaska sentences. The counted weeks, using a city's own NOAA median, are on the city page where this site has transcribed them. <a href="/ak/anchorage/">Anchorage</a> is the one.</p>
+<p><a href="{uf}" rel="nofollow noopener">University of Florida IFAS, Row Covers for Growth Enhancement (CV106)</a>, is about covers in a state where a frost is an occasional event rather than the frame of the season. For frost protection it names soil cover for young crops (commonly potatoes), sprinkler irrigation, and row covers. On sprinklers, UF says freezing water gives up heat to the leaf, the plant stays protected only while water keeps coming in ample quantity, and the method is less effective in wind. On covers, UF says a nonwoven material of about 0.5 ounce per yard protects to about 30°F, and material in the 1.5 to 2.0 ounce range protects to about 25°F. Wire hoops keep the cover off the leaves. This page does not turn those Florida figures into a date for any city.</p>
+<h2>How a city page on this site lines up</h2>
+<p>Each city table has three spring thresholds and three fall thresholds: 36°F, 32°F, and 28°F. Those are NOAA's freeze probability normals, not a warning. The 50 percent column is the median. At <a href="/ak/anchorage/">Anchorage</a> the median last spring dates are {E(t36)} at 36°F, {E(t32)} at 32°F, and {E(t28)} at 28°F, {gap} days from the 28°F median to the 32°F median. Read that as a spread in the climate record. It is not a claim that a hard freeze warning will fall on {E(t28)} this year. The <a href="/states/ak/">Alaska page</a> shows why a shared USDA zone does not share that spread: <a href="/mn/minneapolis/">Minneapolis</a>, also zone 5a, has a median last 32°F freeze on {E(spring50(minneapolis))}.</p>
+<aside class="compare" aria-label="Check another lookup">
+<h2>Check another city</h2>
+<p>Open the <a href="/states/">state list</a> and pick a city. The 36°F, 32°F, and 28°F columns are the three words on this page. <a href="/ak/anchorage/">Anchorage</a> is the worked example. <a href="/zones/5a/">Zone 5a</a> shows cities that share a winter band and do not share a frost date.</p>
+<p class="note">A median is not a warning, and a zone number is not a planting day.</p>
+</aside>
+{end}
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary: frost and frost advisory</a></li>
+<li><a href="{NWS_FREEZE}" rel="nofollow noopener">NWS glossary: freeze and hard freeze</a></li>
+<li><a href="{NWS_COLD}" rel="nofollow noopener">NWS: freeze watch, freeze warning, and frost advisory</a></li>
+<li><a href="{NWS_SCN}" rel="nofollow noopener">NWS Service Change Notice 23-44, updated 26 March 2024</a></li>
+<li><a href="{NWS_HAZ}" rel="nofollow noopener">NWS hazard simplification note on cold products</a></li>
+<li><a href="{NWS_RAH}" rel="nofollow noopener">NWS Raleigh frost and freeze criteria</a></li>
+<li><a href="{uaf}" rel="nofollow noopener">UAF Cooperative Extension HGA-00134, 16 Easy Steps to Gardening in Alaska</a></li>
+<li><a href="{uf}" rel="nofollow noopener">UF IFAS, Row Covers for Growth Enhancement (CV106)</a></li>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
+</ul>
+<p class="note">NWS, UAF, UF IFAS, and the NCEI product page were checked {HARD_FREEZE_GUIDE_PUBLISHED_H}. The Anchorage dates are the same station cache retrieved {PUBLISHED_H}.</p>
+</section>
+</article>'''
+    crumbs = [("/", "Home"), (path, "Hard freeze vs frost")]
+    page(path, title, desc,
+         body, crumbs,
+         [article(h1, path, published=HARD_FREEZE_GUIDE_PUBLISHED, modified=HARD_FREEZE_GUIDE_PUBLISHED, image=FROST_HERO),
+          faq_ld(faqs)],
+         lastmod=HARD_FREEZE_GUIDE_PUBLISHED)
+
 def legal_pages():
     simple("/about/", f"About {BRAND}", "What Which Frost is, and how frost dates and planting notes are chosen.",
            f"About {BRAND}", f'''<p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
@@ -1244,9 +1346,11 @@ def legal_pages():
                ("Are there pages that compare cities to each other?",
                 "The longest and shortest growing season page and the no computed frost date page both read the same per station cache as every city page and rank or group cities by one NOAA element, without adding a new source."),
            ])
-    simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost uses an original mark and no photographs of places or people.",
-           "Image policy", '''<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
-<p>City pages do not use photos. There is no photograph on this site. If a later page adds an image, it will be original or clearly licensed, this page will name it, and the image will link here.</p>''', "Image policy")
+    simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost uses an original mark. The one scene picture is labeled AI-generated.",
+           "Image policy", f'''<p class="byline">By {BRAND}. Last verified {HARD_FREEZE_GUIDE_PUBLISHED_H}.</p>
+<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
+<p>City pages do not use photos of places. The <a href="/guides/hard-freeze-vs-frost/">hard freeze guide</a> uses one picture of frost on a lawn at dawn. That picture is AI-generated. It is not a photograph of a real yard, and it shows no person, no logo, and no readable text. The caption on that page links here.</p>''', "Image policy",
+           lastmod=HARD_FREEZE_GUIDE_PUBLISHED, published=PUBLISHED, modified=HARD_FREEZE_GUIDE_PUBLISHED)
     simple("/disclaimer/", f"Disclaimer | {BRAND}", "Which Frost publishes climate averages, not a forecast and not agricultural, legal, or insurance advice.",
            "Disclaimer", f'''<p>Last updated {PUBLISHED_H}.</p>
 <h2>Averages, not a forecast</h2><p>Frost dates are 30 year climate normals. A given year can freeze earlier or later than the median. Nothing on this site is a weather forecast. Check a forecast if you need the next few nights.</p>
@@ -1343,7 +1447,9 @@ def extras(cities):
     open(os.path.join(ROOT, "sitemap.xml"), "w").write(xml)
     lines = [f"# {BRAND}", "",
              f"> Which Frost ({DOMAIN}) lists median last spring and first fall frost dates for {len(cities)} large U.S. cities, from NOAA NCEI 1991 to 2020 climate normals, with USDA hardiness zones and state extension planting notes where transcribed. Last verified {PUBLISHED_H}.",
-             "", "## Start", f"- {url('/')}", f"- {url('/states/')}", f"- {url('/zones/')}", f"- {url('/methodology/')}", "", "## States"]
+             "", "## Start", f"- {url('/')}", f"- {url('/states/')}", f"- {url('/zones/')}", f"- {url('/methodology/')}",
+             f"- {url('/guides/hard-freeze-vs-frost/')} Hard freeze, frost, and a freeze warning",
+             "", "## States"]
     states = sorted(set(c["st"] for c in cities))
     for st in states:
         lines.append(f"- {url('/states/' + st.lower() + '/')} {US[st]}")
@@ -1408,6 +1514,7 @@ def main():
         city_page(c, cities)
     growing_season_page(cities)
     no_computed_frost_page(cities)
+    hard_freeze_guide(cities)
     legal_pages()
     not_found()
     extras(cities)
