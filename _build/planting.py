@@ -109,9 +109,62 @@ GA_MONTHS = {
     12: "Order next year's seed. UGA does not name a planting list for December.",
 }
 
+# University of Alaska Fairbanks Cooperative Extension, HGA-00134,
+# "16 Easy Steps to Gardening in Alaska". Page checked 20 Nov 2026.
+# https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php
+# Week counts are UAF's. Day offsets below are those weeks times 7, counted
+# from the city NOAA 50 percent last spring 32 F date. UAF's own example
+# uses 1 June, not the station date.
+AK_SOURCE = {
+    "state": "AK",
+    "title": "16 Easy Steps to Gardening in Alaska, UAF Cooperative Extension HGA-00134",
+    "url": "https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php",
+    "reviewed": "checked 20 Nov 2026",
+    "groups": [
+        {
+            "name": "Celery",
+            "crops": "celery",
+            "start": -84, "end": -70,
+            "says": "Start 10 to 12 weeks before the average last killing frost. Counted here as 84 to 70 days before this city's NOAA 50 percent 32°F date.",
+        },
+        {
+            "name": "Tanana tomato and Brussels sprouts",
+            "crops": "Tanana tomato, Brussels sprouts",
+            "start": -56, "end": -56,
+            "says": "Start 8 weeks before the average last killing frost. UAF names Tanana tomatoes at 8 weeks and other outdoor tomatoes at 6 weeks. Those are not the same row.",
+        },
+        {
+            "name": "Eggplant, pepper, other tomato",
+            "crops": "eggplant, pepper, outdoor tomato other than Tanana",
+            "start": -42, "end": -42,
+            "says": "Start 6 weeks before the average last killing frost. UAF marks eggplant as difficult to transplant: sow several seeds in one pot and move a single plant without disturbing the roots.",
+        },
+        {
+            "name": "Cole crops and early head lettuce",
+            "crops": "cabbage, cauliflower, broccoli, head lettuce, kale",
+            "start": -42, "end": -28,
+            "says": "Start 4 to 6 weeks before the average last killing frost. UAF limits the head lettuce and kale note to an early crop. Cabbage, cauliflower, Brussels sprouts, and broccoli are usually set out as transplants.",
+        },
+        {
+            "name": "Squash, cucumber, pumpkin",
+            "crops": "summer squash, cucumber, pumpkin",
+            "start": -21, "end": -21,
+            "says": "Start 3 weeks before the average last killing frost. UAF marks these as difficult to transplant and says to sow three seeds in a 3 to 4 inch pot, then keep the strongest plant.",
+        },
+        {
+            "name": "Direct seed",
+            "crops": "bean, pea, beet, potato, carrot, radish, chard, rutabaga, corn under plastic, parsley, kale, parsnip, kohlrabi, spinach, lettuce, turnip, mustard, zucchini, green onion",
+            "start": -14, "end": 0,
+            "says": "UAF says these may be seeded in the garden up to two weeks before the last killing frost, with little danger of loss. The same publication says beans freeze easily and that an early bean planting needs cover when the night falls near freezing, and it lists corn only under plastic. The span is 14 days before the NOAA 50 percent date through that date.",
+        },
+    ],
+    "extra": "UAF's worked example counts six weeks back from a 1 June last killing frost and lands on 20 April. This table uses that counting rule with this city's NOAA 50 percent date, not 1 June. HGA-00134 says the Anchorage area, the Kenai Peninsula, and Bristol Bay have low soil temperatures because wind off the water moderates the summer, and it names clear plastic mulch for warm soil crops such as corn, tomatoes, and squash. A garden in a frost pocket, it says, should be planted only with frost resistant vegetables, and a few feet of extra elevation can add days to the season. Outside the Interior, UAF says few sites ripen tomatoes, except favored spots in Anchorage and the Matanuska Valley under plastic mulch. Peat pots are not recommended, because they do not break down in cold Alaska soils. These counted dates are medians plus extension offsets, not a forecast and not agricultural advice.",
+}
+
 SOURCES = {
     "CO": CO_SOURCE,
     "NH": NH_SOURCE,
+    "AK": AK_SOURCE,
 }
 
 
