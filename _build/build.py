@@ -216,7 +216,24 @@ window.wfLoadGA4 = function () {
 </script>
 <script src="/assets/consent.js?v=1" defer></script>"""
 
+# AdSense low-value-content fix (20 Nov 2026): paths listed in _build/thin-noindex.txt
+# get noindex,follow and stay out of the sitemap until they have real unique substance.
+_THIN_NOINDEX = set()
+try:
+    import os as _os
+    with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "thin-noindex.txt"), encoding="utf-8") as _fh:
+        _THIN_NOINDEX = {l.strip().strip("/") for l in _fh if l.strip() and not l.startswith("#")}
+except FileNotFoundError:
+    pass
+
+
+def _is_thin(path):
+    return str(path).strip("/") in _THIN_NOINDEX
+
+
 def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, legal=False, nav_current=None, lastmod=None):
+    if _is_thin(path):
+        noindex = True
     title = re.sub(r"\s+", " ", title).strip()
     if len(title) >= 60:
         raise SystemExit(f"title {len(title)} >= 60: {title}")
@@ -1009,6 +1026,7 @@ def legal_pages():
 <p>Google Analytics 4 loads on a public page only after you choose Allow analytics on the consent banner. The preview build does not load it. The Google tag is not requested until that choice. Until then, Consent Mode v2 defaults keep ad storage, ad user data, ad personalization, and analytics storage denied.</p>
 <h2>Contact</h2><p>If you email us or use the contact form, your name, email address, and message are used to reply. The form is delivered by FormSubmit (formsubmit.co). We keep messages only as long as needed to respond.</p>
 <h2>Advertising</h2><p>Which Frost loads the Google AdSense script and a <code>google-adsense-account</code> meta tag (publisher {ADSENSE_PUB}) on public pages so the site can be verified for Google AdSense. No ad units are placed on pages today, so you should not see display ads. If we start showing ads, they will be labeled, and this policy and the <a href="/ad-disclosure/">advertising disclosure</a> will say so. You can opt out of personalized advertising at <a href="https://www.google.com/settings/ads" rel="nofollow noopener">Google Ads Settings</a> and <a href="https://www.aboutads.info/choices/" rel="nofollow noopener">aboutads.info/choices</a>.</p>
+<h2>Google advertising cookies and your choices</h2><p>Third-party vendors, including Google, use cookies to serve ads based on a user's prior visits to this website or other websites. Google's use of advertising cookies enables it and its partners to serve ads based on your visit to this site and/or other sites on the Internet. You may opt out of personalized advertising by visiting <a href="https://adssettings.google.com/" rel="nofollow noopener">Google Ads Settings</a>. Alternatively, you can opt out of a third-party vendor's use of cookies for personalized advertising at <a href="https://www.aboutads.info/choices/" rel="nofollow noopener">aboutads.info/choices</a>. For more information, see <a href="https://policies.google.com/technologies/partner-sites" rel="nofollow noopener">how Google uses information from sites or apps that use its services</a>.</p>
 <h2 id="cookies">Cookies</h2><p>Which Frost does not set its own cookie. The allow or refuse choice is stored in this browser's local storage as wf-ga4-consent, with the value granted or denied, so the banner can stay dismissed. If you allow analytics, Google Analytics 4 may set its own cookies and receive the page address. Consent Mode v2 still defaults ad storage, ad user data, and ad personalization to denied while no ad units are shown.</p>
 <p>Choose Cookie settings in the footer to change your choice. Blocking cookies and local storage does not block the frost dates. See the <a href="/ad-disclosure/">advertising disclosure</a>.</p>
 <h2>Hosting</h2><p>The site is hosted on GitHub Pages, which may log IP addresses for security and operations.</p>

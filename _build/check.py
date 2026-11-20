@@ -15,6 +15,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import SITE_INDEXABLE, GA4_ID
 from build import fmt_date, load_cities
 
+# Paths in _build/thin-noindex.txt are intentionally noindex (AdSense low-value-content fix, 20 Nov 2026).
+import os as _os
+_THIN = set()
+try:
+    with open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "thin-noindex.txt"), encoding="utf-8") as _fh:
+        _THIN = {l.strip().strip("/") for l in _fh if l.strip() and not l.startswith("#")}
+except FileNotFoundError:
+    pass
+
+
+def _thin_rel(rel):
+    r = str(rel).replace("\\", "/")
+    if r.endswith("index.html"):
+        r = r[: -len("index.html")]
+    return r.strip("/") in _THIN
+
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAUNCH = "--launch" in sys.argv or SITE_INDEXABLE
 LEGAL = {"terms", "privacy", "disclaimer", "copyright", "ad-disclosure"}
@@ -63,7 +81,7 @@ for f in files:
         if rel == "404.html":
             if "noindex" not in raw:
                 fail("404-indexable")
-        elif "noindex" in raw:
+        elif "noindex" in raw and not _thin_rel(rel):
             fail(f"noindex {rel}")
         if "static.cloudflareinsights.com/beacon.min.js" not in raw:
             fail(f"nobeacon {rel}")
