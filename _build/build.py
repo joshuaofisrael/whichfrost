@@ -15,7 +15,8 @@ from config import (SITE_INDEXABLE, BRAND, DOMAIN, BASE_URL, PUBLISHED, PUBLISHE
                     ZONE_REFRESH_PUBLISHED, ZONE_REFRESH_PUBLISHED_H,
                     LEGAL_UPDATED, LEGAL_UPDATED_H,
                     TOMATO_GUIDE_PUBLISHED, TOMATO_GUIDE_PUBLISHED_H, ADSENSE_PUB,
-                    ANCHORAGE_REFRESH, ANCHORAGE_REFRESH_H)
+                    ANCHORAGE_REFRESH, ANCHORAGE_REFRESH_H,
+                    PROTECT_GUIDE_PUBLISHED, PROTECT_GUIDE_PUBLISHED_H)
 from planting import SOURCES, GA_SOURCE, GA_MONTHS, offset_rows
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,6 +43,10 @@ NWS_HAZ = "https://www.weather.gov/news/243009-cold-hazard-simplification"
 NWS_SCN = "https://www.weather.gov/media/notification/pdf_2023_24/scn23-44_public_program_text_products_freeze_cold_aab.pdf"
 NWS_RAH = "https://www.weather.gov/rah/FrostFreezemaps"
 UAF_GARLIC = "https://www.uaf.edu/ces/publications/database/gardening/garlic.php"
+ACES_FROST = "https://www.aces.edu/blog/topics/lawn-garden/protecting-plants-during-frost-advisories/"
+TAMU_FROST = "https://mytexas.ag.tamu.edu/publications/protecting-landscapes-and-horticultural-crops-from-frosts-and-freezes/"
+UC_FROST = "https://www.ucanr.edu/site/uc-master-gardeners-sacramento-county/frost-and-protection-sensitive-plants"
+FROST_HERO = "/assets/images/frost-cloth-garden-bed.png"
 CENSUS_POP = "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/cities/totals/sub-est2024.csv"
 PHZM = "https://planthardiness.ars.usda.gov/"
 PRISM = "https://prism.oregonstate.edu/phzm/"
@@ -441,6 +446,27 @@ def season_place(city, cities):
 def city_link(c):
     return f'<a href="/{c["st"].lower()}/{c["slug"]}/">{E(c["name"])}</a>'
 
+def calendar_gap(later, earlier):
+    """Days from earlier MMDD to later MMDD on a non-leap calendar.
+
+    Used only to describe the gap between two NOAA probability dates.
+    Not a growing season. NOAA publishes that element itself.
+    """
+    mdays = (0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+    def doy(val):
+        if not val or len(val) < 5 or val[2] != "/":
+            return None
+        month, day = int(val[:2]), int(val[3:5])
+        if not (1 <= month <= 12 and 1 <= day <= mdays[month]):
+            return None
+        return sum(mdays[:month]) + day
+
+    a, b = doy(later), doy(earlier)
+    if a is None or b is None:
+        return None
+    return a - b
+
 def anchorage_refresh_block(city, cities):
     """Station-specific reading of the three NOAA thresholds, plus zone 5a peers.
     Numbers come from the same cache as the tables. Not a second frost dataset.
@@ -488,6 +514,56 @@ def anchorage_refresh_block(city, cities):
 <aside class="compare" aria-label="Check another city">
 <h2>Check another zone 5a city</h2>
 <p>Anchorage is USDA zone 5a, the same winter band as {peers}. The frost dates are not the same number. The <a href="/states/ak/">Alaska page</a> lists every zone 5a city on this site, and <a href="/{bend["st"].lower()}/{bend["slug"]}/">{E(bend["name"])}</a> is the short season comparison, in zone {E(bend.get("zone") or "")} rather than 5a.</p>
+<p class="note">A USDA zone is the average coldest winter temperature, not a planting day. These dates are medians, not a guarantee for this year.</p>
+</aside>
+{mid}'''
+
+def birmingham_refresh_block(city, cities):
+    """Birmingham's three NOAA thresholds, set next to the other Alabama cities.
+
+    Numbers come from the same cache as the tables. The 1991 to 2020 normals
+    were not replaced. NCEI was checked again on the protect-guide date.
+    """
+    mobile = lookup_city(cities, "AL", "mobile")
+    huntsville = lookup_city(cities, "AL", "huntsville")
+    montgomery = lookup_city(cities, "AL", "montgomery")
+    tuscaloosa = lookup_city(cities, "AL", "tuscaloosa")
+    raw32 = city["station_rec"]["dates"].get("prblst-t32fp50", "")
+    raw36 = city["station_rec"]["dates"].get("prblst-t36fp50", "")
+    raw28 = city["station_rec"]["dates"].get("prblst-t28fp50", "")
+    raw10 = city["station_rec"]["dates"].get("prblst-t32fp10", "")
+    t36 = fmt_date(raw36)
+    t28 = fmt_date(raw28)
+    p10 = fmt_date(raw10)
+    gap_10 = calendar_gap(raw10, raw32)
+    gap_mobile = calendar_gap(raw32, mobile["station_rec"]["dates"].get("prblst-t32fp50", ""))
+    gap_hsv = calendar_gap(huntsville["station_rec"]["dates"].get("prblst-t32fp50", ""), raw32)
+    gap_tusc = calendar_gap(raw32, tuscaloosa["station_rec"]["dates"].get("prblst-t32fp50", ""))
+    if None in (t36, t28, p10, gap_10, gap_mobile, gap_hsv, gap_tusc):
+        raise SystemExit("birmingham refresh is missing a NOAA date")
+    peers = (
+        f'{city_link(mobile)} ({E(spring50(mobile))}, zone {E(mobile.get("zone") or "")}), '
+        f'{city_link(huntsville)} ({E(spring50(huntsville))}, zone {E(huntsville.get("zone") or "")}), '
+        f'{city_link(montgomery)} ({E(spring50(montgomery))}), and '
+        f'{city_link(tuscaloosa)} ({E(spring50(tuscaloosa))})')
+    mid = related_reads([
+        ("/guides/protect-plants-from-frost/", "How to protect plants from frost",
+         "Covers, soil water, and pots, with the temperatures extension pages name."),
+        ("/states/al/", "Alabama frost dates",
+         f"Five cities. Median last 32°F freeze runs from {spring50(mobile)} to {spring50(huntsville)}."),
+        ("/zones/8a/", "USDA zone 8a",
+         "Birmingham and Huntsville share this winter band. Their frost dates do not match."),
+        (f"/{mobile['st'].lower()}/{mobile['slug']}/", f"{mobile['name']} frost dates",
+         f"Earliest median last 32°F freeze of the Alabama cities here: {spring50(mobile)}."),
+    ])
+    return f'''<h2>What the three Birmingham dates are for</h2>
+<p>The 50 percent spring dates at this station are {E(t36)} at 36°F, {E(spring50(city))} at 32°F, and {E(t28)} at 28°F. The 10 percent spring date at 32°F is {E(p10)}, {gap_10} days after the median. That count is the calendar gap between two NOAA probability dates. It is not a forecast that a freeze will land on {E(p10)} this year, and it is not NOAA's growing season figure.</p>
+<p>On {PROTECT_GUIDE_PUBLISHED_H} the <a href="{NOAA_HOME}" rel="nofollow noopener">NCEI product page</a> still called the 1991 to 2020 normals the latest set, said a new set is produced about every 10 years, and said the 2023 v1.0.1 update left agricultural normals unchanged. The freeze dates in the tables above were not replaced. The station file is still the {PUBLISHED_H} retrieval.</p>
+<p>Among the five Alabama cities on this site, {city_link(mobile)} has the earliest median last 32°F freeze, {E(spring50(mobile))}, and {city_link(huntsville)} has the latest, {E(spring50(huntsville))}. Birmingham's median is {gap_mobile} days after Mobile and {gap_hsv} days before Huntsville. {city_link(tuscaloosa)} is {gap_tusc} days earlier than Birmingham. Each figure is one station's median. This site does not average them into a state date. The <a href="/states/al/">Alabama page</a> puts the five rows side by side.</p>
+<p><a href="{ACES_FROST}" rel="nofollow noopener">Alabama Cooperative Extension</a> (Shane Harris, posted 21 April 2021, checked {PROTECT_GUIDE_PUBLISHED_H}) says warm season vegetables such as tomatoes and peppers can start to show leaf damage at 33°F, and that some cool season crops can take 26 to 31°F for a limited time. On this station the 36°F median ({E(t36)}) falls later than the 32°F median ({E(spring50(city))}). A reader who uses only the 32°F headline can still be inside the part of spring when a frost advisory, which the <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> ties to surface temperatures in the middle 30s, is an ordinary event in the climate record. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a> collects what that Alabama page, Texas A&amp;M, and UC say about covers, soil water, and pots. It does not change the dates on this page. This is not agricultural advice.</p>
+<aside class="compare" aria-label="Check another city">
+<h2>Check another Alabama city</h2>
+<p>Birmingham is USDA zone {E(city.get("zone") or "")}. The other large cities on this site are {peers}. Same state, different medians. Open a row before treating Birmingham's {E(spring50(city))} date as the date for the coast or for Huntsville.</p>
 <p class="note">A USDA zone is the average coldest winter temperature, not a planting day. These dates are medians, not a guarantee for this year.</p>
 </aside>
 {mid}'''
@@ -571,8 +647,15 @@ def city_page(city, cities):
     elif st in SOURCES:
         sources.append((SOURCES[st]["title"], SOURCES[st]["url"]))
     is_anchorage = st == "AK" and city["slug"] == "anchorage"
-    verified = ANCHORAGE_REFRESH_H if is_anchorage else PUBLISHED_H
+    is_birmingham = st == "AL" and city["slug"] == "birmingham"
+    if is_anchorage:
+        verified = ANCHORAGE_REFRESH_H
+    elif is_birmingham:
+        verified = PROTECT_GUIDE_PUBLISHED_H
+    else:
+        verified = PUBLISHED_H
     anchorage_html = ""
+    birmingham_html = ""
     end_related = ""
     source_note = (f"Normals retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive "
                    "(v1.0.1, file dated 20230404). Zone ZIP tables retrieved the same day.")
@@ -616,6 +699,40 @@ def city_page(city, cities):
                        f"(v1.0.1, file dated 20230404). On {ANCHORAGE_REFRESH_H} the NCEI product page still called the 1991 to 2020 "
                        "normals the latest release and said a new set is issued about every 10 years. The freeze probability dates "
                        "on this page were not replaced. NWS and UAF pages linked here were checked the same day. Zone ZIP tables were retrieved 16 Nov 2026.")
+    if is_birmingham:
+        if not (sp and p10):
+            raise SystemExit("birmingham is missing a 32°F spring date")
+        title = f"Last frost date in Birmingham: around {sp}"
+        desc = (f"Birmingham's median last 32°F freeze is {sp}. NOAA's 10 percent date is {p10}. "
+                "1991 to 2020 normals, not a forecast.")
+        faqs[2] = (
+            faqs[2][0],
+            faqs[2][1] + " Extension steps for covers, soil water, and pots, and the temperatures those pages name, are summarized on this site's frost protection guide. That guide is not a forecast.",
+        )
+        sources.extend([
+            ("NWS glossary: frost and frost advisory", NWS_FROST),
+            ("Alabama Cooperative Extension, Protecting Plants During Frost Advisories (21 April 2021)", ACES_FROST),
+        ])
+        mobile = lookup_city(cities, "AL", "mobile")
+        huntsville = lookup_city(cities, "AL", "huntsville")
+        montgomery = lookup_city(cities, "AL", "montgomery")
+        tuscaloosa = lookup_city(cities, "AL", "tuscaloosa")
+        birmingham_html = birmingham_refresh_block(city, cities)
+        end_related = related_reads([
+            (f"/{huntsville['st'].lower()}/{huntsville['slug']}/", f"{huntsville['name']} frost dates",
+             f"Latest median last 32°F freeze of the Alabama cities here: {spring50(huntsville)}."),
+            (f"/{tuscaloosa['st'].lower()}/{tuscaloosa['slug']}/", f"{tuscaloosa['name']} frost dates",
+             f"Nearest Alabama peer on the calendar. Median last 32°F freeze on {spring50(tuscaloosa)}."),
+            (f"/{montgomery['st'].lower()}/{montgomery['slug']}/", f"{montgomery['name']} frost dates",
+             f"Median last 32°F freeze on {spring50(montgomery)}, zone {montgomery.get('zone')}."),
+            ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+             "Where Birmingham's NOAA season sits against the rest of the cities."),
+        ])
+        source_note = (f"Station file retrieved {PUBLISHED_H} from the NCEI 1991 to 2020 annual and seasonal by station archive "
+                       f"(v1.0.1, file dated 20230404). On {PROTECT_GUIDE_PUBLISHED_H} the NCEI product page still called the 1991 to 2020 "
+                       "normals the latest release, said a new set is produced about every 10 years, and said the 2023 v1.0.1 update left "
+                       "agricultural normals unchanged. The freeze probability dates on this page were not replaced. The Alabama extension "
+                       "page and the NWS frost glossary were checked the same day. Zone ZIP tables were retrieved 16 Nov 2026.")
     src_html = "".join(f'<li><a href="{href}" rel="nofollow noopener">{E(t)}</a></li>' for t, href in sources)
     body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
 <p class="byline">By {BRAND}. Last verified {verified}.</p>
@@ -627,7 +744,9 @@ def city_page(city, cities):
 <p>Thresholds are the minimum temperature. 36°F is a light frost in many extension guides, 32°F is a freeze, and 28°F is a harder freeze. Blank results use NOAA's own codes, described under the tables. Spring 90 percent is an earlier date (a freeze is still likely). Spring 10 percent is a later date (only a 10 percent chance the last freeze is still to come).</p>
 {frost_table(dates)}
 <p class="note">Not computed means the file stores -9999 with measurement flag Y (not enough values). Too rare to compute means -6666 (NOAA requires at least a 10 percent chance the temperature occurs). Year round risk means -4444.</p>
+<p>Those three thresholds are medians, not a warning for a given night. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a> is the page for covers, watering the soil, and moving pots, and for the temperatures extension services name for each step.</p>
 {anchorage_html}
+{birmingham_html}
 {planting_block(city, cities)}
 {end_related}
 <h2>More pages</h2>
@@ -639,7 +758,12 @@ def city_page(city, cities):
     # zone_bit already contains an anchor and was not escaped as a whole. lead uses E() except zone_bit which is inserted raw inside a <p> that started after escaped text.
     # The paragraph above mixes escaped and raw. zone_bit is safe (we built it). Fix: the sentence "USDA zone..." is inside a <p> with zone_bit unescaped. Good.
     crumbs = [("/", "Home"), (f"/states/{st.lower()}/", state), (path, name)]
-    modified = ANCHORAGE_REFRESH if is_anchorage else None
+    if is_anchorage:
+        modified = ANCHORAGE_REFRESH
+    elif is_birmingham:
+        modified = PROTECT_GUIDE_PUBLISHED
+    else:
+        modified = None
     schemas = [article(h1, path, published=PUBLISHED, modified=modified), faq_ld(faqs)]
     page(path, title, desc, body, crumbs, schemas, nav_current=None, lastmod=modified)
 
@@ -731,7 +855,7 @@ def alaska_state_page(group, all_cities):
 <p>At this station the median spring dates are {E(t36)} at 36°F, {E(spring50(anchorage))} at 32°F, and {E(t28)} at 28°F. The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as ice on surfaces, often while the thermometer is still in the middle 30s. A <a href="{NWS_FREEZE}" rel="nofollow noopener">freeze</a> is widespread air at 32°F or below, and a hard freeze is 28°F or lower for long enough that the glossary says it kills most vegetation. The Anchorage page cites the warning wording and the 2024 change that folded the separate hard freeze warning into the freeze warning. Checked {ANCHORAGE_REFRESH_H}.</p>
 <p><a href="https://www.uaf.edu/ces/publications/database/gardening/easy-steps-gardening-alaska.php" rel="nofollow noopener">UAF Cooperative Extension HGA-00134</a>, checked the same day, says wind off the water keeps soil cool around Anchorage, the Kenai, and Bristol Bay, and that a frost pocket should be planted only with frost resistant vegetables. The seed start weeks from that publication are counted on the <a href="/ak/anchorage/">city page</a> from the NOAA 50 percent date. They are not repeated here, and they are not a forecast.</p>
 <h2>Nearby states</h2>
-<p>No neighboring state has a city page in this build. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>.</p>
+<p>No neighboring state has a city page in this build. <a href="/states/">All states</a>. <a href="/zones/">All zones</a>. If a frost is forecast, <a href="/guides/protect-plants-from-frost/">how to protect plants from frost</a> is separate from these medians: covers, soil water, and pots.</p>
 {end}
 {faq_html(faqs)}
 <section class="sources"><h2>Sources</h2><ul>
@@ -752,9 +876,141 @@ def alaska_state_page(group, all_cities):
          [article(h1, path, published=PUBLISHED, modified=ANCHORAGE_REFRESH), faq_ld(faqs)],
          nav_current="/states/", lastmod=ANCHORAGE_REFRESH)
 
+def alabama_state_page(group, all_cities):
+    """Five Alabama stations, not one state date. Removed from the thin list on 21 Nov 2026."""
+    st = "AL"
+    state = US[st]
+    path = "/states/al/"
+    cities = sorted(group, key=lambda c: c["station_rec"]["dates"].get("prblst-t32fp50", "99/99"))
+    dated = [c for c in cities if spring50(c)]
+    if len(dated) < 2:
+        raise SystemExit("alabama page needs computed spring dates")
+    earliest, latest = dated[0], dated[-1]
+    seasons = [(c, season_days(c)) for c in cities if season_days(c) is not None]
+    short_c, short_g = min(seasons, key=lambda t: t[1])
+    long_c, long_g = max(seasons, key=lambda t: t[1])
+    bham = lookup_city(all_cities, "AL", "birmingham")
+    mobile = lookup_city(all_cities, "AL", "mobile")
+    huntsville = lookup_city(all_cities, "AL", "huntsville")
+    montgomery = lookup_city(all_cities, "AL", "montgomery")
+    tuscaloosa = lookup_city(all_cities, "AL", "tuscaloosa")
+    gap = calendar_gap(
+        latest["station_rec"]["dates"].get("prblst-t32fp50", ""),
+        earliest["station_rec"]["dates"].get("prblst-t32fp50", ""))
+    gap_bham_mobile = calendar_gap(
+        bham["station_rec"]["dates"].get("prblst-t32fp50", ""),
+        mobile["station_rec"]["dates"].get("prblst-t32fp50", ""))
+    if gap is None or gap_bham_mobile is None:
+        raise SystemExit("alabama date gap failed")
+    rows = []
+    for c in sorted(cities, key=lambda c: c["name"]):
+        gsl = season_days(c)
+        gsl_cell = f"{gsl:.0f} days" if gsl is not None else "Not computed"
+        z = c.get("zone") or ""
+        zlink = f'<a href="/zones/{z}/">{E(z)}</a>' if z else ""
+        sid = c["station_rec"]["id"]
+        rows.append(
+            f'<tr><td>{city_link(c)}</td><td>{zlink}</td><td>{E(spring50(c) or "Not computed")}</td>'
+            f'<td>{E(fall50(c) or "Not computed")}</td><td>{E(gsl_cell)}</td>'
+            f'<td>{E(sid)}</td><td>{E(miles_text(c["miles"]))}</td></tr>')
+    zones = sorted({c["zone"] for c in cities if c.get("zone")}, key=lambda z: (int(z[:-1]), z[-1]))
+    zone_links = ", ".join(f'<a href="/zones/{z}/">zone {E(z)}</a>' for z in zones)
+    mid = related_reads([
+        ("/al/birmingham/", "Birmingham frost dates",
+         f"Median last 32°F freeze {spring50(bham)}. The 36°F, 32°F, and 28°F columns are on that page."),
+        ("/al/mobile/", "Mobile frost dates",
+         f"Earliest Alabama median on this site, {spring50(mobile)}, in zone {mobile.get('zone')}."),
+        ("/al/huntsville/", "Huntsville frost dates",
+         f"Latest Alabama median on this site, {spring50(huntsville)}."),
+        ("/guides/protect-plants-from-frost/", "How to protect plants from frost",
+         "What Alabama Extension, Texas A&M, and UC say about covers, water, and pots."),
+    ])
+    end = related_reads([
+        ("/al/montgomery/", "Montgomery frost dates",
+         f"Median last 32°F freeze on {spring50(montgomery)}, zone {montgomery.get('zone')}."),
+        ("/al/tuscaloosa/", "Tuscaloosa frost dates",
+         f"Median last 32°F freeze on {spring50(tuscaloosa)}, close to Birmingham on the calendar."),
+        ("/zones/8a/", "USDA zone 8a",
+         "Birmingham and Huntsville share the zone and not the frost date."),
+        ("/longest-and-shortest-growing-season/", "Longest and shortest growing season",
+         "Alabama's five seasons against the national list on this site."),
+    ])
+    h1 = (f"Alabama frost dates run from {spring50(earliest)} in {earliest['name']} "
+          f"to {spring50(latest)} in {latest['name']}")
+    bham_zone = bham.get("zone") or ""
+    hsv_zone = huntsville.get("zone") or ""
+    bham_range = bham.get("zone_range") or ""
+    same_zone = bham_zone and bham_zone == hsv_zone
+    if same_zone:
+        zone_q = f"Birmingham and Huntsville are both zone {bham_zone}. Do they share a frost date?"
+        zone_a = (f"No. USDA zone {bham_zone} is a winter minimum of {bham_range}°F, not a spring frost date. "
+                  f"On this site Huntsville's median last 32°F freeze is {spring50(huntsville)} and Birmingham's is {spring50(bham)}. "
+                  f"Mobile is zone {mobile.get('zone') or 'a different band'} and its median is {spring50(mobile)}. "
+                  "The zone number does not move the frost date.")
+    else:
+        zone_q = "Does a shared USDA zone give two Alabama cities the same frost date?"
+        zone_a = (f"No. Birmingham is zone {bham_zone} and Huntsville is zone {hsv_zone}. "
+                  f"Their median last 32°F freezes are {spring50(bham)} and {spring50(huntsville)}. "
+                  "The zone number is not a planting day.")
+    faqs = [
+        ("Which Alabama city on this site has the latest median last frost?",
+         f"{latest['name']}, at {spring50(latest)} for the 50 percent last spring freeze at 32°F. "
+         f"{earliest['name']} is the earliest, at {spring50(earliest)}. "
+         f"The calendar gap between those two medians is {gap} days. "
+         "Both figures are 1991 to 2020 medians at one station each. They are not a forecast, and they are not a guarantee for this year."),
+        (zone_q, zone_a),
+        ("Does this page include an Alabama planting calendar?",
+         "No. Which Frost prints a vegetable calendar only where a state extension chart was transcribed, and Alabama does not have one in this build. "
+         "The Alabama Cooperative Extension frost page cited here is about which temperatures hurt which crops, and about covers and watering. "
+         "It is not turned into a sowing date. This is not agricultural advice."),
+    ]
+    title = f"Alabama frost dates: {spring50(earliest)} to {spring50(latest)}"
+    desc = (f"NOAA median last 32°F freeze for {len(cities)} Alabama cities: "
+            f"{spring50(earliest)} in {earliest['name']} to {spring50(latest)} in {latest['name']}. Medians, not a forecast.")
+    body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
+<p class="byline">By {BRAND}. Last verified {PROTECT_GUIDE_PUBLISHED_H}.</p>
+<div class="answer"><p>{len(cities)} Alabama cities are on this site. The earliest median last spring freeze at 32°F is {E(spring50(earliest))} in {city_link(earliest)}. The latest is {E(spring50(latest))} in {city_link(latest)}, {gap} days later on the calendar. These are 1991 to 2020 medians at separate stations, not a forecast and not one date for the whole state.</p></div>
+<p class="note">A given year can freeze earlier or later than the median. This is not agricultural advice. NOAA's own growing season element, not a subtraction of these two dates, is in the table.</p>
+<h2>Five stations, not a state average</h2>
+<p>Each city keeps the nearest NOAA frost station within 50 miles. Which Frost does not blend them. {city_link(mobile)} ({E(mobile["station_rec"]["id"])}, {E(miles_text(mobile["miles"]))} from the city center) is the early row. {city_link(huntsville)} ({E(huntsville["station_rec"]["id"])}, {E(miles_text(huntsville["miles"]))}) is the late row. {city_link(bham)} sits between them: {E(spring50(bham))}, {gap_bham_mobile} days after Mobile. {city_link(montgomery)} is {E(spring50(montgomery))} and {city_link(tuscaloosa)} is {E(spring50(tuscaloosa))}. Station ids and distances are in the table so a reader can see the date belongs to that station, not to every backyard in the city.</p>
+<div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Zone</th><th>Last 32°F</th><th>First 32°F</th><th>Growing season</th><th>Station</th><th>Distance</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>
+<p>NOAA's median growing season at 32°F runs from {short_g:.0f} days in {city_link(short_c)} to {long_g:.0f} days in {city_link(long_c)}. That season length is NOAA's own element. The zones on these cities are {zone_links}. <a href="/zones/">All zones</a>.</p>
+<aside class="compare" aria-label="Check another city">
+<h2>Check another Alabama city</h2>
+<p>Open {city_link(mobile)} for the early spring, {city_link(huntsville)} for the late one, or {city_link(bham)} for the three thresholds (36°F, 32°F, and 28°F) at one station. Neighboring states: <a href="/states/ms/">Mississippi</a>, <a href="/states/tn/">Tennessee</a>, <a href="/states/ga/">Georgia</a>, <a href="/states/fl/">Florida</a>.</p>
+<p class="note">Do not plant from the zone number. The frost date is the city row, and it is a median.</p>
+</aside>
+{mid}
+<h2>What 33°F means next to these dates</h2>
+<p><a href="{ACES_FROST}" rel="nofollow noopener">Alabama Cooperative Extension</a> (Shane Harris, posted 21 April 2021, checked {PROTECT_GUIDE_PUBLISHED_H}) says warm season vegetables, including tomatoes and peppers, can start to show leaf damage at 33°F. Some cool season crops, it says, can take 26 to 31°F for a limited time. After a fruit tree has flowered and set fruit, the same page says research it cites found that 10 percent of the fruit is killed at 28°F. Those are crop temperatures, not a sowing calendar, and this site does not invent one for Alabama.</p>
+<p>The 32°F column in the table is the headline median. A 33°F leaf-damage line, as that extension page states it, sits closer to a frost in the middle 30s than to a hard freeze at 28°F. The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a> describes frost as ice on surfaces, often while the air is still in the middle 30s. Birmingham's page is where the 36°F, 32°F, and 28°F medians for that station are printed side by side. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a> is the covers, soil water, and pots page, using this Alabama source plus Texas A&amp;M and UC. The steps there do not replace a forecast, and they do not move the medians.</p>
+<p>On {PROTECT_GUIDE_PUBLISHED_H} the <a href="{NOAA_HOME}" rel="nofollow noopener">NCEI product page</a> still called the 1991 to 2020 normals the latest set and said the 2023 update left agricultural normals unchanged. The dates above were not replaced. They are the {PUBLISHED_H} station cache.</p>
+<h2>Nearby states</h2>
+<p><a href="/states/ms/">Mississippi</a>, <a href="/states/tn/">Tennessee</a>, <a href="/states/ga/">Georgia</a>, <a href="/states/fl/">Florida</a>. <a href="/states/">All states</a>. <a href="/methodology/">How the station is chosen</a>.</p>
+{end}
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
+<li><a href="{NOAA_METHOD}" rel="nofollow noopener">NOAA Normals Calculation Methodology 2020</a></li>
+<li><a href="{CENSUS_POP}" rel="nofollow noopener">U.S. Census Bureau, sub-est2024</a></li>
+<li><a href="{PHZM}" rel="nofollow noopener">2023 USDA Plant Hardiness Zone Map</a></li>
+<li><a href="{ACES_FROST}" rel="nofollow noopener">Alabama Cooperative Extension, Protecting Plants During Frost Advisories, 21 April 2021</a></li>
+<li><a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary, frost</a></li>
+</ul>
+<p class="note">Station cache retrieved {PUBLISHED_H} (NCEI v1.0.1, file dated 20230404). NCEI's product page, the Alabama extension page, and the NWS frost glossary were checked {PROTECT_GUIDE_PUBLISHED_H}. Medians, not a guarantee.</p>
+</section>
+</article>'''
+    page(path, title, desc, body,
+         [("/", "Home"), ("/states/", "States"), (path, state)],
+         [article(h1, path, published=PUBLISHED, modified=PROTECT_GUIDE_PUBLISHED), faq_ld(faqs)],
+         nav_current="/states/", lastmod=PROTECT_GUIDE_PUBLISHED)
+
 def state_page(st, cities):
     if st == "AK":
         alaska_state_page(cities, ALL)
+        return
+    if st == "AL":
+        alabama_state_page(cities, ALL)
         return
     state = US[st]
     path = f"/states/{st.lower()}/"
@@ -781,6 +1037,7 @@ def state_page(st, cities):
 <div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Zone</th><th>Last 32°F</th><th>First 32°F</th><th>Station distance</th></tr></thead><tbody>{"".join(rows)}</tbody></table></div>
 {zone_block}
 <h2>Nearby states</h2><p>{neigh or "No neighboring state has a city page in this build."}</p>
+<p>If a frost is forecast, <a href="/guides/protect-plants-from-frost/">how to protect plants from frost</a> covers cloth, soil water, and pots. The dates in the table stay the NOAA medians.</p>
 {faq_html(faqs)}
 <p class="note">Source: <a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI 1991 to 2020 climate normals</a>. <a href="/methodology/">How the station is chosen</a>.</p>
 </article>'''
@@ -965,7 +1222,7 @@ def zone_page(zone, cities):
 <noscript><p>Find the current month inside any month list below.</p></noscript>
 {"".join(blocks)}
 <h2>Related hubs</h2>
-<p>States with a city in this zone: {state_links}. <a href="/states/">All states</a>.</p>
+<p>States with a city in this zone: {state_links}. <a href="/states/">All states</a>. Frost dates above are medians. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a> is separate: covers, watering the soil, and moving pots when a cold night is actually forecast.</p>
 <p>Adjacent zone numbers on this site: {near_html}. <a href="/zones/">All zones</a>.</p>
 {end_related}
 {faq_html(faqs)}
@@ -1031,7 +1288,7 @@ def growing_season_page(cities):
 <h2>How this list is built</h2>
 <p>The growing season figure is NOAA's own prbgsl-t32fp50 element from the same 1991 to 2020 Climate Normals by station archive every city page on this site cites, read from the same per station cache (see <a href="/methodology/">sources and methods</a>). It is not calculated here by subtracting the spring and fall dates; NOAA publishes it as its own figure, and a station can carry it even where the separate spring or fall date is not computed.</p>
 <h2>Related pages</h2>
-<p>Open a city above for its full freeze probability table and any planting calendar. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/states/">All states</a>. <a href="/zones/">All USDA zones</a>.</p>
+<p>Open a city above for its full freeze probability table and any planting calendar. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a>. <a href="/states/">All states</a>. <a href="/zones/">All USDA zones</a>.</p>
 {faq_html(faqs)}
 <section class="sources"><h2>Sources</h2><ul>
 <li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
@@ -1084,7 +1341,7 @@ def no_computed_frost_page(cities):
 <p>For these stations NOAA did compute a milder 36°F last spring date, shown below, plus the growing season length used on <a href="/longest-and-shortest-growing-season/">the longest and shortest growing season page</a>. The 32°F table on each city page still shows the 90 and 10 percent figures where NOAA published them.</p>
 <div class="tablewrap"><table class="list"><thead><tr><th>City</th><th>Last spring 36°F (50 percent)</th><th>Growing season at 32°F (days)</th></tr></thead><tbody>{rows}</tbody></table></div>
 <h2>Related pages</h2>
-<p>Open a city above for its full freeze probability table. <a href="/longest-and-shortest-growing-season/">Longest and shortest growing season</a>. <a href="/states/">All states</a>. <a href="/zones/">All USDA zones</a>.</p>
+<p>Open a city above for its full freeze probability table. <a href="/longest-and-shortest-growing-season/">Longest and shortest growing season</a>. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a>. <a href="/states/">All states</a>. <a href="/zones/">All USDA zones</a>.</p>
 {faq_html(faqs)}
 <section class="sources"><h2>Sources</h2><ul>
 <li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a></li>
@@ -1143,7 +1400,7 @@ def home(cities):
 <h2>Large cities</h2><ul class="cols">{"".join(feats)}</ul>
 <h2>Hardiness zones</h2><p>What to plant now, by USDA zone: {zlinks}.</p>
 <h2>More lookups</h2>
-<p><a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/longest-and-shortest-growing-season/">Which cities have the longest and shortest growing season</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a> (covers, watering the soil, and moving pots).</p>
 {faq_html(faqs)}
 </article>'''
     page("/", "Which frost date should I use? | Which Frost",
@@ -1167,7 +1424,7 @@ def states_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>Pick a state to see every city page, the median 32°F dates, and the zone. Each state page links back to its cities.</p>
 <ul class="cols">{"".join(items)}</ul>
-<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a>.</p>
 {faq_html(faqs)}</article>'''
     page("/states/", "Which frost date should I use by state",
          "State by state frost dates for the largest U.S. cities, from NOAA 1991 to 2020 climate normals.",
@@ -1190,7 +1447,7 @@ def zones_index(cities):
 <p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
 <p>A USDA zone is the average coldest winter temperature, in 5°F steps on the 2023 map. It is not a vegetable sowing date. Open a zone for the cities in it and any state extension timing we transcribed. City pages link back here.</p>
 <ul class="cols">{"".join(items)}</ul>
-<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>.</p>
+<p><a href="/longest-and-shortest-growing-season/">Longest and shortest growing season, across all cities</a>. <a href="/no-computed-frost-date/">Cities with no computed 32°F frost date</a>. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a>.</p>
 {faq_html(faqs)}
 <p class="note">Source: <a href="{PHZM}" rel="nofollow noopener">USDA Plant Hardiness Zone Map</a> and <a href="{PRISM}" rel="nofollow noopener">PRISM ZIP tables</a>.</p>
 </article>'''
@@ -1209,6 +1466,113 @@ def simple(path, title, desc, h1, inner, crumb, legal=False, noindex=False, faqs
         schemas.append(faq_ld(faqs))
     page(path, title, desc, body, crumbs, schemas, noindex=noindex, legal=legal, lastmod=lastmod)
 
+def protect_plants_guide(cities):
+    """Covers, soil water, and pots, from NWS definitions and three extension pages.
+
+    The hero file is assigned and may be absent. Do not invent a substitute photo.
+    Birmingham is the worked example because that city page was re-checked the same day.
+    """
+    path = "/guides/protect-plants-from-frost/"
+    bham = lookup_city(cities, "AL", "birmingham")
+    mobile = lookup_city(cities, "AL", "mobile")
+    huntsville = lookup_city(cities, "AL", "huntsville")
+    denver = lookup_city(cities, "CO", "denver")
+    raw32 = bham["station_rec"]["dates"].get("prblst-t32fp50", "")
+    raw36 = bham["station_rec"]["dates"].get("prblst-t36fp50", "")
+    raw28 = bham["station_rec"]["dates"].get("prblst-t28fp50", "")
+    raw10 = bham["station_rec"]["dates"].get("prblst-t32fp10", "")
+    t36, t32, t28, p10 = fmt_date(raw36), spring50(bham), fmt_date(raw28), fmt_date(raw10)
+    gap_10 = calendar_gap(raw10, raw32)
+    if None in (t36, t32, t28, p10, gap_10):
+        raise SystemExit("protect guide is missing a Birmingham date")
+    h1 = "How to protect plants from frost: covers, water, and pots"
+    title = "Protect plants from frost: covers, water, pots"
+    desc = (f"Cover plants, water the soil, and move pots before a frost. "
+            f"NWS and extension temperatures, checked {PROTECT_GUIDE_PUBLISHED_H}.")
+    faqs = [
+        ("Does a bed sheet over a plant replace a freeze warning?",
+         "No. A cover is what extension pages describe for a frost night, to slow heat leaving the ground. "
+         "A freeze warning is a forecast that air will stay at or below 32°F for a long time. "
+         "Texas A&M writes that the light covers which help on a still, clear frost do little in a windy hard freeze. "
+         "The dates on a city page are 1991 to 2020 medians, not tonight's warning."),
+        ("Should I sprinkle the leaves all night?",
+         "Texas A&M's freeze publication says ice on a leaf is a poor insulator, and that too little water, or stopping partway through the night, can injure plants more than leaving them dry. "
+         "The watering step the same publication, Alabama Extension, and UC Master Gardeners describe for a home garden is watering the soil ahead of the night, because moist soil holds more heat than dry soil. "
+         "That is not a recommendation to run a hose on the foliage."),
+        ("When do the covers come off?",
+         "Alabama Extension says to take the cover off each morning as temperatures rise, because sun on a covered plant can heat new growth. "
+         "UC Master Gardeners of Sacramento County say to remove sheets and blankets daily when it is sunny and above freezing, and that frost cloth, which lets some light and air through, can stay on for a few days. "
+         "The two pages are not the same instruction. Read the one that matches the cloth you used."),
+    ]
+    mid = related_reads([
+        ("/al/birmingham/", "Birmingham frost dates",
+         f"Worked example: median spring dates of {t36} at 36°F, {t32} at 32°F, and {t28} at 28°F."),
+        ("/states/al/", "Alabama frost dates",
+         f"Five cities. The median last 32°F freeze runs from {spring50(mobile)} to {spring50(huntsville)}."),
+        ("/zones/8a/", "USDA zone 8a",
+         "A winter band, not a frost date. Birmingham and Huntsville share the zone and not the date."),
+        ("/methodology/", "Sources and methods",
+         "Which station a city page uses, and why the 1991 to 2020 normals were not replaced."),
+    ])
+    end = related_reads([
+        (f"/{mobile['st'].lower()}/{mobile['slug']}/", f"{mobile['name']} frost dates",
+         f"An earlier median, {spring50(mobile)}, on the Alabama coast."),
+        (f"/{huntsville['st'].lower()}/{huntsville['slug']}/", f"{huntsville['name']} frost dates",
+         f"A later median, {spring50(huntsville)}, in the north of the state."),
+        (f"/{denver['st'].lower()}/{denver['slug']}/", f"{denver['name']} frost dates",
+         f"A colder median on this site: last 32°F freeze on {spring50(denver)}."),
+        ("/states/", "Frost dates by state",
+         "Pick a state, then a city, before you treat one median as yours."),
+    ])
+    body = f'''<article class="prose wide"><h1>{E(h1)}</h1>
+<p class="byline">By {BRAND}. Published {PROTECT_GUIDE_PUBLISHED_H}. Last verified {PROTECT_GUIDE_PUBLISHED_H}.</p>
+<figure class="hero-photo"><a href="/image-policy/"><img src="{FROST_HERO}" width="1200" height="675" alt="Frost cloth over a garden bed in early daylight"></a>
+<figcaption><a href="/image-policy/">AI-generated image. Image policy.</a> Frost cloth over a bed, the kind of cover the extension pages below describe. Not a photograph of a real garden.</figcaption></figure>
+<div class="answer"><p>On a still, clear night, the extensions cited here say to cover plants so heat from the soil stays around them, to water the soil ahead of time because moist ground holds that heat, and to move pots somewhere the root ball is not sitting in the open. The temperatures that decide whether that is a frost night or a killing freeze come from the National Weather Service, not from a city's median frost date.</p></div>
+<p class="note">A city page on this site is a 1991 to 2020 median. It is not a forecast for tonight and not a guarantee for this year. Nothing here is agricultural advice. The extension pages outrank this summary where they disagree with it.</p>
+<h2>Which temperature the night actually is</h2>
+<p>The <a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary</a>, checked {PROTECT_GUIDE_PUBLISHED_H}, describes frost as thin ice crystals on the ground or on plants. It forms the way dew does, except the surface falls below 32°F, and it often shows up with the thermometer still in the middle 30s, because the cooling is mostly radiation to a clear sky. A frost advisory, on that page, is for widespread frost in the growing season, usually with surface temperatures in the middle 30s.</p>
+<p>A <a href="{NWS_FREEZE}" rel="nofollow noopener">freeze</a>, same glossary, is surface air at 32°F or below over a wide area for a climatologically significant time. A hard freeze is 28°F or lower for an extended period, which the glossary says kills most vegetation. The <a href="{NWS_COLD}" rel="nofollow noopener">NWS cold weather page</a> uses those lines for action: a freeze warning when the forecast goes below 32°F for a long period (some crops and garden plants die), and temperatures below 28°F for an extended period can kill most of them. A frost advisory means areas of frost are expected or occurring, and sensitive plants are at risk.</p>
+<p><a href="{TAMU_FROST}" rel="nofollow noopener">Texas A&amp;M AgriLife Extension, HORT-PU-068</a> (Monte Nesbitt and Robert "Skip" Richter, original publish date April 2014, page checked {PROTECT_GUIDE_PUBLISHED_H}) splits the same weather into a radiative frost and an advective freeze. On a radiative night, clear and nearly calm, it says leaves exposed to the sky can run as much as 5 degrees colder than the air temperature, which is why a plant can show frost injury when the recorded air never reached 32°F. In a windy advective freeze, the same publication says the lightweight covers that work on a frost give little or no protection by themselves.</p>
+<h2>A worked example: Birmingham's three medians</h2>
+<p>At <a href="/al/birmingham/">Birmingham</a> the NOAA 50 percent spring dates are {E(t36)} at 36°F, {E(t32)} at 32°F, and {E(t28)} at 28°F. The 10 percent date at 32°F is {E(p10)}, {gap_10} days after the median. Those are medians at Birmingham AP, not a warning. <a href="{ACES_FROST}" rel="nofollow noopener">Alabama Cooperative Extension</a> (Shane Harris, posted 21 April 2021, checked {PROTECT_GUIDE_PUBLISHED_H}) says warm season vegetables, including tomatoes, peppers, squash, corn, and okra, can start to show leaf damage at 33°F. Some cool season crops, it says, can take 26 to 31°F for a limited time. After fruit has set, the same page says research it cites found that 10 percent of the fruit is killed at 28°F. It does not name that study.</p>
+<p>Read that against the three Birmingham columns, not as a single "last frost." A 33°F leaf-damage line sits nearer the 36°F median ({E(t36)}) than the 32°F headline ({E(t32)}). The 28°F fruit figure lines up with the hard freeze definition, and at this station that median is {E(t28)}. <a href="/al/mobile/">Mobile</a>'s median last 32°F freeze is {E(spring50(mobile))}. <a href="/al/huntsville/">Huntsville</a>'s is {E(spring50(huntsville))}. <a href="/co/denver/">Denver</a>'s is {E(spring50(denver))}. The cover and the watering step do not move when the city changes. The night you are planning for does. The <a href="/states/al/">Alabama page</a> is the five city spread. <a href="/methodology/">Sources and methods</a> is how a station was chosen.</p>
+{mid}
+<h2>Covers: cloth to the ground, off in the morning</h2>
+<p>Alabama Extension says a loose lightweight cloth, such as a bed sheet, can add 3 to 5 degrees to the air around the plant, and that the point is to trap heat from the ground, not heat from the plant. Cloth, it says, works better than plastic, because plastic transfers more heat, and foliage may freeze where it touches the plastic. Weigh the cover down, leave no gap for heat to leak, and take it off each morning as temperatures rise. Sun on a covered plant, that page says, can heat new growth. For a small tomato or pepper it also names a bucket, newspaper, or a gallon milk carton. In an extreme case it says a new transplant can be dug, brought inside, and replanted after the night.</p>
+<p>Texas A&amp;M describes the same idea for a radiative frost, with a timing detail the Alabama page does not: put the cover on late in the afternoon or in the evening, before sundown, so the soil and the plant have taken on the day's radiation. Drape it loosely, or stake it out like a tent. Do not tie it tight around the trunk. That publication says a tight tie blocks the ground radiation the cover is there to catch. Heavier frost blankets protect more than light ones, and it says to consider two layers on a severe frost. Clear plastic, it says, cools fast by radiation and can injure tissue at the point of contact. Cardboard boxes and large cans are named as other covers.</p>
+<p><a href="{UC_FROST}" rel="nofollow noopener">UC Master Gardeners of Sacramento County</a> (Caroline Hathaway and Cathy Coulter, November 2008, page checked {PROTECT_GUIDE_PUBLISHED_H}) agree on covering before sunset and on taking sheets and blankets off daily when the day is sunny and above freezing. They differ on frost cloth: weights that can give 4 to 8 degrees of protection, cloth that can lie on the foliage, and cloth that can stay on for a few days because some light and air pass through. That is not the Alabama instruction for a bed sheet. If the fabric is frost cloth, the UC page is the one that says it may stay. If it is a sheet or a blanket, both pages say it comes off.</p>
+<h2>Water the soil. Do not confuse that with sprinkling the leaves</h2>
+<p>All three pages tell a gardener to have the plants watered before the night. Alabama Extension: plants short of water are more vulnerable, and wet soil holds heat longer and lets it go slowly during the frost. Texas A&amp;M: water the ground liberally the day before, because wet soil and puddles take in radiation by day and release it at night, and because water gives off heat as it freezes. A dry, stressed plant, it says, resists freezing less well. UC: dry plants are more susceptible, and moist soil retains heat better than dry soil. UC also says to rake mulch away before a frost night so the bare soil can warm by day and radiate at night. That is a frost night instruction. It is not the winter mulch Texas A&amp;M describes for a perennial crown after the top has died back.</p>
+<p>Sprinkling foliage is a different tool, and Texas A&amp;M spends most of a section warning about it. Ice, that publication says, is a poor insulator. The heat comes from water as it freezes, so the water has to keep coming. Too little, or stopping during the night, can do more harm than not sprinkling, and wind over wet ice can cool the tissue further by evaporation. The rates it prints (for strawberries, grapes, and citrus) are commercial volumes, and it says the ice load can flatten a garden and break limbs. This page does not turn those rates into a home hose setting. The home step the publication actually pairs with covers is watering the soil, plus a jug of water under the cover for a small transplant, because water cools more slowly than air.</p>
+<h2>Pots cool faster than plants in the ground</h2>
+<p>Texas A&amp;M's container section says roots in a pot lack the earth's insulation and are often less hardy than the top of the plant. They may die, it says, if the pot drops much below 32°F. The move it names is into a garage or other protected place. The next option is to group the pots on a protected side of the house, water them, pile mulch or leaves among them, and cover the group. UC says to move potted plants to a warmer spot next to the house or under a patio cover, especially the south side. Alabama's frost page is about small plants under a bucket or carton more than about a large pot, and its extreme case is digging a new transplant and bringing it in.</p>
+<p>None of the three says a cover, a watering, or a move indoors will save every plant. Texas A&amp;M says even a careful combination can fail in a severe event, particularly if the plant is in a tender stage, and that pruning right after a freeze does not improve the outcome. Wait, it says, until you can see what is alive. UC says the same about waiting to prune until the frost risk has passed and new growth starts.</p>
+<aside class="compare" aria-label="Check another city">
+<h2>Check your own median before you plan the night</h2>
+<p>The steps above do not depend on a ZIP code. The date you are counting toward does. <a href="/al/birmingham/">Birmingham</a> is the worked example ({E(t32)} at 32°F). <a href="/al/mobile/">Mobile</a> is earlier ({E(spring50(mobile))}), <a href="/al/huntsville/">Huntsville</a> is later ({E(spring50(huntsville))}), and <a href="/co/denver/">Denver</a> is a colder median ({E(spring50(denver))}). Open the <a href="/states/">state list</a> for the city you actually garden in.</p>
+<p class="note">A median is not a warning. A USDA zone is not a planting day. If a freeze is predicted, use the forecast, not the normal.</p>
+</aside>
+{end}
+{faq_html(faqs)}
+<section class="sources"><h2>Sources</h2><ul>
+<li><a href="{NWS_FROST}" rel="nofollow noopener">NWS glossary: frost and frost advisory</a>, checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+<li><a href="{NWS_FREEZE}" rel="nofollow noopener">NWS glossary: freeze and hard freeze</a>, checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+<li><a href="{NWS_COLD}" rel="nofollow noopener">NWS: freeze warning and frost advisory</a>, checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+<li><a href="{ACES_FROST}" rel="nofollow noopener">Alabama Cooperative Extension, Protecting Plants During Frost Advisories, Shane Harris, 21 April 2021</a>, checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+<li><a href="{TAMU_FROST}" rel="nofollow noopener">Texas A&amp;M AgriLife Extension HORT-PU-068, Protecting Landscapes and Horticultural Crops from Frosts and Freezes, April 2014</a>, checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+<li><a href="{UC_FROST}" rel="nofollow noopener">UC Master Gardeners of Sacramento County, Frost and Protection for Sensitive Plants, November 2008</a>, checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+<li><a href="{NOAA_HOME}" rel="nofollow noopener">NOAA NCEI U.S. Climate Normals 1991 to 2020</a>, product page checked {PROTECT_GUIDE_PUBLISHED_H}</li>
+</ul>
+<p class="note">Birmingham, Mobile, Huntsville, and Denver dates are the station cache retrieved {PUBLISHED_H} (NCEI v1.0.1, file dated 20230404). On {PROTECT_GUIDE_PUBLISHED_H} NCEI still called that normals set the latest. The dates were not replaced.</p>
+</section>
+</article>'''
+    crumbs = [("/", "Home"), (path, "Protect plants from frost")]
+    page(path, title, desc, body, crumbs,
+         [article(h1, path, published=PROTECT_GUIDE_PUBLISHED, modified=PROTECT_GUIDE_PUBLISHED, image=FROST_HERO),
+          faq_ld(faqs)],
+         lastmod=PROTECT_GUIDE_PUBLISHED)
+
 def legal_pages():
     simple("/about/", f"About {BRAND}", "What Which Frost is, and how frost dates and planting notes are chosen.",
            f"About {BRAND}", f'''<p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
@@ -1218,7 +1582,7 @@ def legal_pages():
 <p>Something look wrong? <a href="/contact/">Tell us</a> and we will re check the station file.</p>''', "About")
     simple("/methodology/", "Which frost date: sources and methods",
            "How Which Frost picks a NOAA station, reads frost probability dates, assigns a USDA zone, and copies extension planting dates.",
-           "Sources and methods", f'''<p class="byline">By {BRAND}. Last verified {PUBLISHED_H}.</p>
+           "Sources and methods", f'''<p class="byline">By {BRAND}. Station files retrieved {PUBLISHED_H}. NCEI product page checked again {PROTECT_GUIDE_PUBLISHED_H}.</p>
 <h2>Frost dates</h2>
 <p>The numbers are the NOAA NCEI U.S. Climate Normals for 1991 to 2020, annual and seasonal file, version 1.0.1 (archive dated 20230404). Retrieved {PUBLISHED_H}. Product page: <a href="{NOAA_HOME}" rel="nofollow noopener">U.S. Climate Normals</a>. The probability definition is in the <a href="{NOAA_METHOD}" rel="nofollow noopener">Normals Calculation Methodology 2020</a>.</p>
 <p>For spring, the published date is the chance the last freeze at that threshold happens on or after that date. For fall, it is the chance the first freeze happens on or before that date. We show 36°F, 32°F, and 28°F at 10, 50, and 90 percent. The growing season length is NOAA's own 50 percent figure for 32°F, the number of days the season lasts at least that long in half of years. We do not subtract the two dates to invent a length.</p>
@@ -1235,7 +1599,8 @@ def legal_pages():
 <p>New Hampshire uses the UNH Extension fact sheet "Growing Vegetables: When to Plant Your Vegetable Garden," retrieved {PUBLISHED_H}. Offsets are counted from the NOAA date, not from the Memorial Day example in that fact sheet.</p>
 <p>Every other state has no transcribed calendar in this build. The city page says so.</p>
 <h2>Checked</h2><p>Station files and the city match were retrieved {PUBLISHED_H}. Rebuild from the cache in <code>_build/cache</code> without downloading again. Re check when NCEI publishes a new normals period.</p>
-<p>City pages are listed by <a href="/states/">state</a> and by <a href="/zones/">USDA zone</a>, or compared directly on the <a href="/longest-and-shortest-growing-season/">longest and shortest growing season</a> and <a href="/no-computed-frost-date/">no computed frost date</a> pages.</p>''', "Sources and methods",
+<p>On {PROTECT_GUIDE_PUBLISHED_H} the NCEI product page still called the 1991 to 2020 normals the latest set, said a new set is produced about every 10 years, and said the 2023 v1.0.1 update left agricultural normals unchanged. City frost dates were not replaced.</p>
+<p>City pages are listed by <a href="/states/">state</a> and by <a href="/zones/">USDA zone</a>, or compared directly on the <a href="/longest-and-shortest-growing-season/">longest and shortest growing season</a> and <a href="/no-computed-frost-date/">no computed frost date</a> pages. <a href="/guides/protect-plants-from-frost/">How to protect plants from frost</a> cites extension pages on covers, soil water, and pots. It is not a frost date and it does not change a city table.</p>''', "Sources and methods",
            faqs=[
                ("How does Which Frost pick a station?",
                 "A city is matched to the nearest NOAA station that has a frost product, using the Census Bureau 2024 Gazetteer city point. The cap is 50 miles. Farther than that, the city is skipped. Which Frost does not blend two stations."),
@@ -1243,10 +1608,13 @@ def legal_pages():
                 "Colorado uses CSU Extension GardenNotes #720. Georgia uses University of Georgia Extension Circular 943. New Hampshire uses the UNH Extension fact sheet on when to plant a vegetable garden. Every other state has no transcribed calendar in this build."),
                ("Are there pages that compare cities to each other?",
                 "The longest and shortest growing season page and the no computed frost date page both read the same per station cache as every city page and rank or group cities by one NOAA element, without adding a new source."),
-           ])
-    simple("/image-policy/", f"Image policy | {BRAND}", "Which Frost uses an original mark and no photographs of places or people.",
-           "Image policy", '''<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
-<p>City pages do not use photos. There is no photograph on this site. If a later page adds an image, it will be original or clearly licensed, this page will name it, and the image will link here.</p>''', "Image policy")
+           ], lastmod=PROTECT_GUIDE_PUBLISHED, published=PUBLISHED, modified=PROTECT_GUIDE_PUBLISHED)
+    simple("/image-policy/", f"Image policy | {BRAND}",
+           "Which Frost's logo is an original drawing. The frost protection guide's one scene is labeled AI-generated.",
+           "Image policy", f'''<p class="byline">By {BRAND}. Last verified {PROTECT_GUIDE_PUBLISHED_H}.</p>
+<p>The logo, favicon, and social image are original drawings made for this site: a navy square, a pale snowflake, and a gold center. They are not photographs, not a copy of a weather service mark, and not the USDA zone map.</p>
+<p>City pages do not use photos of places. The <a href="/guides/protect-plants-from-frost/">frost protection guide</a> uses one picture of frost cloth over a garden bed in early daylight. That picture is AI-generated. It is not a photograph of a real garden, and it shows no person, no logo, and no readable text. The caption on that page links here.</p>''', "Image policy",
+           lastmod=PROTECT_GUIDE_PUBLISHED, published=PUBLISHED, modified=PROTECT_GUIDE_PUBLISHED)
     simple("/disclaimer/", f"Disclaimer | {BRAND}", "Which Frost publishes climate averages, not a forecast and not agricultural, legal, or insurance advice.",
            "Disclaimer", f'''<p>Last updated {PUBLISHED_H}.</p>
 <h2>Averages, not a forecast</h2><p>Frost dates are 30 year climate normals. A given year can freeze earlier or later than the median. Nothing on this site is a weather forecast. Check a forecast if you need the next few nights.</p>
@@ -1343,7 +1711,11 @@ def extras(cities):
     open(os.path.join(ROOT, "sitemap.xml"), "w").write(xml)
     lines = [f"# {BRAND}", "",
              f"> Which Frost ({DOMAIN}) lists median last spring and first fall frost dates for {len(cities)} large U.S. cities, from NOAA NCEI 1991 to 2020 climate normals, with USDA hardiness zones and state extension planting notes where transcribed. Last verified {PUBLISHED_H}.",
-             "", "## Start", f"- {url('/')}", f"- {url('/states/')}", f"- {url('/zones/')}", f"- {url('/methodology/')}", "", "## States"]
+             "", "## Start", f"- {url('/')}", f"- {url('/states/')}", f"- {url('/zones/')}", f"- {url('/methodology/')}",
+             f"- {url('/guides/protect-plants-from-frost/')} How to protect plants from frost",
+             f"- {url('/longest-and-shortest-growing-season/')} Longest and shortest growing season",
+             f"- {url('/no-computed-frost-date/')} Cities with no computed 32°F frost date",
+             "", "## States"]
     states = sorted(set(c["st"] for c in cities))
     for st in states:
         lines.append(f"- {url('/states/' + st.lower() + '/')} {US[st]}")
@@ -1408,6 +1780,7 @@ def main():
         city_page(c, cities)
     growing_season_page(cities)
     no_computed_frost_page(cities)
+    protect_plants_guide(cities)
     legal_pages()
     not_found()
     extras(cities)
