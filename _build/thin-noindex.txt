@@ -3,6 +3,8 @@
 # Remove a path from this list once the page has real, unique substance.
 # states/ak was removed on 20 Nov 2026 after a station-estimate note and a
 # zone 5a comparison that only this state has. Do not put it back.
+# states/al was removed on 21 Nov 2026 after a five-city spread (Mobile to
+# Huntsville) and an Alabama extension temperature note. Do not put it back.
 ca/berkeley
 ca/burbank
 ca/daly-city
@@ -21,7 +23,6 @@ ca/rialto
 ca/richmond
 ca/santa-clarita
 ca/temecula
-states/al
 states/ar
 states/ct
 states/dc

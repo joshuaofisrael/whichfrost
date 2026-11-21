@@ -34,6 +34,11 @@ TOMATO_GUIDE_PUBLISHED_H = "19 Nov 2026"
 # the 16 Nov 2026 retrieval. This date is the day those pages were rewritten.
 ANCHORAGE_REFRESH = "2026-11-20"
 ANCHORAGE_REFRESH_H = "20 Nov 2026"
+# Frost protection guide, Birmingham re-check, and the Alabama hub rewrite.
+# Publish date for the guide. Not a build clock. Birmingham's frost numbers
+# were not replaced; this is the day the NCEI product page was checked again.
+PROTECT_GUIDE_PUBLISHED = "2026-11-21"
+PROTECT_GUIDE_PUBLISHED_H = "21 Nov 2026"
 INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
 # Google AdSense publisher id. Head script + meta only; no ad units in v1.
 ADSENSE_PUB = "ca-pub-5681559774142917"

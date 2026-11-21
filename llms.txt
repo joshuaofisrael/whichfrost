@@ -7,6 +7,9 @@
 - https://whichfrost.com/states/
 - https://whichfrost.com/zones/
 - https://whichfrost.com/methodology/
+- https://whichfrost.com/guides/protect-plants-from-frost/ How to protect plants from frost
+- https://whichfrost.com/longest-and-shortest-growing-season/ Longest and shortest growing season
+- https://whichfrost.com/no-computed-frost-date/ Cities with no computed 32°F frost date
 
 ## States
 - https://whichfrost.com/states/ak/ Alaska
