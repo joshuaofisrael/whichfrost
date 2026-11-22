@@ -261,9 +261,7 @@ def page(path, title, desc, body, crumbs=None, schemas=None, noindex=False, lega
         beacon = ("<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' "
                   f"data-cf-beacon='{{\"token\": \"{CF_BEACON_TOKEN}\"}}'></script><!-- End Cloudflare Web Analytics -->")
         ga4 = GA4_SNIPPET.replace("__GA4__", json.dumps(GA4_ID))
-        adsense = (f'<meta name="google-adsense-account" content="{ADSENSE_PUB}">'
-                   f'<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={ADSENSE_PUB}" '
-                   f'crossorigin="anonymous"></script>')
+        adsense = ""  # AdSense detached 21 Nov 2026 until the account is approved (see seo-central/site-seo-rules.md). Do not re-add.
     else:
         beacon = "<!-- cf-beacon: added when SITE_INDEXABLE is true -->"
         ga4 = ""
@@ -1328,8 +1326,7 @@ def extras(cities):
     open(os.path.join(ROOT, ".nojekyll"), "w").write("")
     open(os.path.join(ROOT, INDEXNOW_KEY + ".txt"), "w").write(INDEXNOW_KEY + "\n")
     # AdSense ads.txt (publisher verification). No ad units on pages yet.
-    open(os.path.join(ROOT, "ads.txt"), "w").write(
-        f"google.com, pub-{ADSENSE_PUB.split('ca-pub-')[-1]}, DIRECT, f08c47fec0942fa0\n")
+    open(os.path.join(ROOT, "ads.txt"), "w").write("")  # AdSense detached 21 Nov 2026 until the account is approved (see seo-central/site-seo-rules.md). Do not re-add.
     bots = ["*", "Googlebot", "Bingbot", "Mediapartners-Google", "OAI-SearchBot", "ChatGPT-User",
             "GPTBot", "PerplexityBot", "Perplexity-User", "ClaudeBot", "Claude-SearchBot", "Claude-User",
             "Google-Extended", "Applebot", "Applebot-Extended", "DuckAssistBot", "Amazonbot", "CCBot", "Bytespider"]
