@@ -39,6 +39,10 @@ ANCHORAGE_REFRESH_H = "20 Nov 2026"
 HARD_FREEZE_GUIDE_PUBLISHED = "2026-11-20"
 HARD_FREEZE_GUIDE_PUBLISHED_H = "20 Nov 2026"
 FROST_HERO = "/assets/images/frost-covered-lawn-dawn.png"
+# Frost protection guide, Birmingham re-check, and the Alabama hub rewrite.
+PROTECT_GUIDE_PUBLISHED = "2026-11-21"
+PROTECT_GUIDE_PUBLISHED_H = "21 Nov 2026"
+PROTECT_HERO = "/assets/images/frost-cloth-garden-bed.png"
 INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
 # Google AdSense publisher id. Head script + meta only; no ad units in v1.
 ADSENSE_PUB = "ca-pub-5681559774142917"
