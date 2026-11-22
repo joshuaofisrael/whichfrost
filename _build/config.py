@@ -34,6 +34,11 @@ TOMATO_GUIDE_PUBLISHED_H = "19 Nov 2026"
 # the 16 Nov 2026 retrieval. This date is the day those pages were rewritten.
 ANCHORAGE_REFRESH = "2026-11-20"
 ANCHORAGE_REFRESH_H = "20 Nov 2026"
+# Guide written 20 Nov 2026. If the frost photo arrives on a later day, set
+# this to that day before the page is merged. Do not use the build clock.
+HARD_FREEZE_GUIDE_PUBLISHED = "2026-11-20"
+HARD_FREEZE_GUIDE_PUBLISHED_H = "20 Nov 2026"
+FROST_HERO = "/assets/images/frost-covered-lawn-dawn.png"
 INDEXNOW_KEY = "c4e1a9b27f6d8043e5a1c8d09b2f74e6"
 # Google AdSense publisher id. Head script + meta only; no ad units in v1.
 ADSENSE_PUB = "ca-pub-5681559774142917"
