@@ -7,6 +7,7 @@
 - https://whichfrost.com/states/
 - https://whichfrost.com/zones/
 - https://whichfrost.com/methodology/
+- https://whichfrost.com/guides/hard-freeze-vs-frost/ Hard freeze, frost, and a freeze warning
 
 ## States
 - https://whichfrost.com/states/ak/ Alaska
